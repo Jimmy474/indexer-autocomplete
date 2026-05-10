@@ -1,0 +1,12 @@
+{
+  "methods": [
+    { "name": "getName" },
+    { "name": "setName" },
+    { "name": "getVersion" }
+  ],
+  "fields": [
+    { "name": "name" },
+    { "name": "version" },
+    { "name": "id" }
+  ]
+}

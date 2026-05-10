@@ -1,0 +1,8 @@
+{
+  "methods": [
+    { "name": "destroy" }
+  ],
+  "fields": [
+    { "name": "hardness" }
+  ]
+}

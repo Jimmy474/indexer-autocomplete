@@ -1,4 +1,4 @@
-package com.github.jimmy474.indexerautocomplete
+package com.jimmy474.indexerautocomplete
 
 import com.intellij.DynamicBundle
 import org.jetbrains.annotations.NonNls
@@ -12,6 +12,7 @@ object MyBundle : DynamicBundle(BUNDLE) {
     operator fun get(@PropertyKey(resourceBundle = BUNDLE) key: String, vararg params: Any) =
         getMessage(key, *params)
 
+    @Suppress("unused")
     @JvmStatic
     fun message(@PropertyKey(resourceBundle = BUNDLE) key: String, vararg params: Any) =
         getMessage(key, *params)
