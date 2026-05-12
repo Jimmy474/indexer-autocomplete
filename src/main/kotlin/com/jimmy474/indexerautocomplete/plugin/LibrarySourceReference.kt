@@ -26,22 +26,21 @@ class LibraryReferenceProvider: PsiReferenceProvider(){
 
         val regex = LibraryIndexCompletionProvider.INDEX_REFERENCE_FULL_REGEX
         val match = regex.find(element.text) ?: return emptyArray()
-        val fqn = match.groupValues[1]
-        val memberType = match.groupValues[5].ifBlank { null }
-        val memberName = match.groupValues[6].ifBlank { null }
+        val indexReference = match.toIndexReference()
+        val fqn = indexReference.packages.joinToString(".")
 
         val refs: MutableList<PsiReference> = mutableListOf()
-        if(memberType != null && memberName != null){
-            refs.add(LibrarySourceReference(element, TextRange(match.groups[6]!!.range.first, match.groups[6]!!.range.last+1), fqn, memberType, memberName))
+        if(indexReference.memberType != IndexReference.MemberType.NONE && indexReference.memberName != null){
+            refs.add(LibrarySourceReference(element, indexReference.memberNameRange!!, fqn, indexReference.memberType, indexReference.memberName))
         }
-        refs.add(LibrarySourceReference(element, TextRange(match.groups[1]!!.range.first, match.groups[1]!!.range.last+1), fqn, null, null))
+        refs.add(LibrarySourceReference(element, indexReference.classNameRange!!, fqn, IndexReference.MemberType.NONE, null))
 
         return refs.toTypedArray()
     }
 }
 
 
-class LibrarySourceReference(element: PsiElement, range: TextRange, val fqn: String, val memberType: String?, val memberName: String?) : PsiReferenceBase<PsiElement>(element, range) {
+class LibrarySourceReference(element: PsiElement, range: TextRange, val fqn: String, val memberType: IndexReference.MemberType, val memberName: String?) : PsiReferenceBase<PsiElement>(element, range) {
     override fun resolve(): PsiElement? {
         val project = element.project
         val scope = GlobalSearchScope.allScope(project)
@@ -50,9 +49,9 @@ class LibrarySourceReference(element: PsiElement, range: TextRange, val fqn: Str
 
         if(memberName == null) return psiClass
         return when (memberType) {
-            LibraryIndexCompletionProvider.METHODS_PREFIX -> psiClass.findMethodsByName(memberName, true).firstOrNull()
-            LibraryIndexCompletionProvider.FIELDS_PREFIX -> psiClass.findFieldByName(memberName, true)
-            else -> null
+            IndexReference.MemberType.METHOD -> psiClass.findMethodsByName(memberName, true).firstOrNull()
+            IndexReference.MemberType.FIELD -> psiClass.findFieldByName(memberName, true)
+            IndexReference.MemberType.NONE -> null
         }
     }
 }

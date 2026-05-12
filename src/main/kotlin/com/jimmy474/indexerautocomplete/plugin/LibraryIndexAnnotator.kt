@@ -3,8 +3,11 @@ package com.jimmy474.indexerautocomplete.plugin
 import com.intellij.lang.annotation.AnnotationHolder
 import com.intellij.lang.annotation.Annotator
 import com.intellij.lang.annotation.HighlightSeverity
+import com.intellij.openapi.editor.DefaultLanguageHighlighterColors
+import com.intellij.openapi.editor.colors.TextAttributesKey
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.guessProjectDir
+import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiManager
@@ -12,68 +15,146 @@ import com.intellij.psi.util.CachedValueProvider
 import com.intellij.psi.util.CachedValuesManager
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.intellij.plugins.markdown.lang.psi.impl.MarkdownFile
+
+object LibraryIndexColors {
+    val MACRO_PREFIX = TextAttributesKey.createTextAttributesKey(
+        "LIBRARY_INDEX_PREFIX", DefaultLanguageHighlighterColors.VALID_STRING_ESCAPE
+    )
+    val MACRO_TEXT = TextAttributesKey.createTextAttributesKey(
+        "LIBRARY_INDEX_TEXT", DefaultLanguageHighlighterColors.STRING
+    )
+
+    val MACRO_METHOD = TextAttributesKey.createTextAttributesKey(
+        "LIBRARY_INDEX_METHOD", DefaultLanguageHighlighterColors.INSTANCE_METHOD
+    )
+
+    val MACRO_METHOD_STATIC = TextAttributesKey.createTextAttributesKey(
+        "LIBRARY_INDEX_METHOD_STATIC", DefaultLanguageHighlighterColors.STATIC_METHOD
+    )
+
+    val MACRO_FIELD = TextAttributesKey.createTextAttributesKey(
+        "LIBRARY_INDEX_FIELD", DefaultLanguageHighlighterColors.INSTANCE_FIELD
+    )
+
+    val MACRO_FIELD_STATIC = TextAttributesKey.createTextAttributesKey(
+        "LIBRARY_INDEX_FIELD_STATIC", DefaultLanguageHighlighterColors.STATIC_FIELD
+    )
+
+    val MACRO_CLASS = TextAttributesKey.createTextAttributesKey(
+        "LIBRARY_INDEX_CLASS", DefaultLanguageHighlighterColors.KEYWORD
+    )
+}
 
 class LibraryIndexAnnotator : Annotator {
     override fun annotate(element: PsiElement, holder: AnnotationHolder) {
         if (element.containingFile !is MarkdownFile) return
         if (element !is LibraryIndexPsiElement) return
 
-        val regex = LibraryIndexCompletionProvider.INDEX_REFERENCE_FULL_REGEX
-        val match = regex.find(element.text) ?: return
+        val text = element.text
+        val startOffset = element.textRange.startOffset
+        val endOffset = element.textRange.endOffset
+
+        holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
+            .range(TextRange(startOffset, startOffset + 2))
+            .textAttributes(LibraryIndexColors.MACRO_PREFIX)
+            .create()
+
+        holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
+            .range(TextRange(endOffset - 1, endOffset))
+            .textAttributes(LibraryIndexColors.MACRO_PREFIX)
+            .create()
+
+        holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
+            .range(TextRange(startOffset + 2, endOffset - 1))
+            .textAttributes(LibraryIndexColors.MACRO_TEXT)
+            .create()
+
+
         val project = element.project
         val projectDir = project.guessProjectDir() ?: return
-        val root = projectDir.findChild("library-index-dependency") ?: return
+        val root = projectDir.findChild("library-index-dependency")
 
-        val pathText = match.groupValues[1]
-        val type = match.groupValues[5]
-        val typeName = match.groupValues[6]
-
-        if(pathText.endsWith('.')){
-            holder.newAnnotation(HighlightSeverity.ERROR, "Path segment cannot end with '.'")
-                .range(element.textRange).create()
+        if (root == null || !root.isDirectory) {
+            holder.newAnnotation(HighlightSeverity.WARNING, "Library index dependency not found in project").range(element.textRange).create()
             return
         }
 
-        if(type.isNotEmpty() && typeName.isEmpty()){
-            holder.newAnnotation(HighlightSeverity.ERROR, "Path segment cannot end with '$type'")
-                .range(element.textRange).create()
+        val regex = LibraryIndexCompletionProvider.INDEX_REFERENCE_FULL_REGEX
+        val match = regex.find(text)
+
+        if (match == null) {
+            holder.newAnnotation(HighlightSeverity.ERROR, "Malformed library reference syntax").range(element.textRange).create()
+            return
+        }
+
+        val indexReference = match.toIndexReference()
+
+        if (indexReference.memberType != IndexReference.MemberType.NONE && indexReference.memberName.isNullOrBlank()) {
+            holder.newAnnotation(HighlightSeverity.ERROR, "Reference cannot end with '${LibraryIndexCompletionProvider.MEMBER_PREFIX}'. Expected a name.").range(element.textRange).create()
             return
         }
 
         var current: VirtualFile = root
-        val parts = pathText.split(".").filter { it.isNotEmpty() }
+        for ((index, part) in indexReference.packages.withIndex()) {
+            val isLastPart = index == indexReference.packages.lastIndex
 
-        for (part in parts) {
-            val next = current.findChild(part) ?: current.findChild("$part.json")
+            val next = if (isLastPart && indexReference.memberType != IndexReference.MemberType.NONE) {
+                current.findChild("$part.json")
+            } else if (isLastPart) {
+                current.findChild("$part.json") ?: current.findChild(part)
+            } else {
+                current.findChild(part)
+            }
+
             if (next == null) {
-                holder.newAnnotation(HighlightSeverity.ERROR, "Path segment '$part' not found")
+                holder.newAnnotation(HighlightSeverity.ERROR, "Package or Class '$part' not found")
                     .range(element.textRange).create()
                 return
             }
             current = next
         }
 
-        if (type.isNotEmpty()) {
-            if (current.isDirectory || current.extension != "json") {
-                holder.newAnnotation(HighlightSeverity.ERROR, "Cannot use $type on a directory")
-                    .range(element.textRange).create()
+        if(!current.isDirectory){
+            indexReference.classNameRange?.let {
+                holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
+                    .range(TextRange(startOffset + it.startOffset, startOffset + it.endOffset))
+                    .textAttributes(LibraryIndexColors.MACRO_CLASS)
+                    .create()
+            }
+        }
+
+        if (indexReference.memberType != IndexReference.MemberType.NONE) {
+            val jsonContent = getCachedJson(current, project)
+            val key = if (indexReference.memberType == IndexReference.MemberType.METHOD) "methods" else "fields"
+            val items = jsonContent?.get(key)?.jsonArray
+            val member = items?.find { it.jsonObject["name"]?.jsonPrimitive?.content == indexReference.memberName }?.jsonObject
+
+            if (member == null) {
+                val label = if (indexReference.memberType == IndexReference.MemberType.METHOD) "Method" else "Field"
+                holder.newAnnotation(HighlightSeverity.ERROR, "$label '${indexReference.memberName}' not found in ${current.nameWithoutExtension} Class").range(element.textRange).create()
                 return
             }
 
-            val jsonContent = getCachedJson(current, project)
-            val key = if (type == LibraryIndexCompletionProvider.METHODS_PREFIX) "methods" else "fields"
-            val items = jsonContent?.get(key)?.jsonArray
-            val exists = items?.any { it.jsonObject["name"]?.jsonPrimitive?.content == typeName } ?: false
+            val isStatic = member["declaration"]?.jsonObject?.get("flags")?.jsonObject?.get("isStatic")?.jsonPrimitive?.boolean ?: false
 
-            if (!exists) {
-                val label = if (type == LibraryIndexCompletionProvider.METHODS_PREFIX) "Method" else "Field"
-                holder.newAnnotation(HighlightSeverity.ERROR, "$label '$typeName' not found in ${current.name}")
-                    .range(element.textRange).create()
-                return
+
+            val typeHighlighter = when (indexReference.memberType) {
+                IndexReference.MemberType.METHOD -> if(isStatic) LibraryIndexColors.MACRO_METHOD_STATIC else LibraryIndexColors.MACRO_METHOD
+                IndexReference.MemberType.FIELD -> if(isStatic) LibraryIndexColors.MACRO_FIELD_STATIC else LibraryIndexColors.MACRO_FIELD
+                else -> LibraryIndexColors.MACRO_TEXT
+            }
+            indexReference.memberNameRange?.let {
+                var additionalOffset = if(indexReference.memberType == IndexReference.MemberType.METHOD) 2 else 0
+                if(indexReference.fullDisplayFlag) additionalOffset += 3
+                holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
+                    .range(TextRange(startOffset + it.startOffset, startOffset + it.endOffset + additionalOffset))
+                    .textAttributes(typeHighlighter)
+                    .create()
             }
         }
     }
@@ -88,7 +169,6 @@ class LibraryIndexAnnotator : Annotator {
             } catch (_: Exception) {
                 null
             }
-
             CachedValueProvider.Result.create(jsonObject, psiFile)
         }
     }

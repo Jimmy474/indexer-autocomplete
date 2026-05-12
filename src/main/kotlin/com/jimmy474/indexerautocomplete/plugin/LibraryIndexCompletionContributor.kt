@@ -3,8 +3,8 @@ package com.jimmy474.indexerautocomplete.plugin
 import com.intellij.codeInsight.AutoPopupController
 import com.intellij.codeInsight.completion.*
 import com.intellij.codeInsight.lookup.AutoCompletionPolicy
-import com.intellij.codeInsight.lookup.Lookup
 import com.intellij.codeInsight.lookup.LookupElementBuilder
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.fileTypes.FileTypeRegistry
 import com.intellij.openapi.project.guessProjectDir
 import com.intellij.openapi.vfs.VirtualFile
@@ -27,11 +27,10 @@ class LibraryIndexCompletionProvider : CompletionProvider<CompletionParameters>(
 
     companion object {
         const val PREFIX = "@"
-        const val METHODS_PREFIX = "#"
-        const val FIELDS_PREFIX = "%"
+        const val MEMBER_PREFIX = "#"
         const val VALID_ID = "[a-zA-Z_$][a-zA-Z0-9_$]*"
 
-        val INDEX_REFERENCE_PATH_REGEX = Regex("($VALID_ID(\\.$VALID_ID)*)(\\.|(([$METHODS_PREFIX$FIELDS_PREFIX])($VALID_ID)?))?")
+        val INDEX_REFERENCE_PATH_REGEX = Regex("($VALID_ID(\\.$VALID_ID)*)($MEMBER_PREFIX($VALID_ID)?(\\((\\.{3})?\\))?)?")
 
         val INDEX_REFERENCE_FULL_REGEX = Regex("^$PREFIX`$INDEX_REFERENCE_PATH_REGEX`$")
     }
@@ -43,11 +42,7 @@ class LibraryIndexCompletionProvider : CompletionProvider<CompletionParameters>(
         if (!root.isDirectory) return
 
         val path = parameters.originalFile.text.substring(libraryElement.textRange.startOffset, parameters.offset).removePrefix("${PREFIX}`").trim()
-        val memberType = when {
-            path.contains(METHODS_PREFIX) -> METHODS_PREFIX
-            path.contains(FIELDS_PREFIX) -> FIELDS_PREFIX
-            else -> null
-        }
+        val memberType = if(path.contains(MEMBER_PREFIX)) MEMBER_PREFIX else null
         val memberName = memberType?.let { path.substringAfterLast(it) }
         val pathText = memberType?.let { path.substringBeforeLast(it) } ?: path
         val parts = pathText.split('.')
@@ -62,22 +57,34 @@ class LibraryIndexCompletionProvider : CompletionProvider<CompletionParameters>(
 
         if (memberType != null) {
             currentDir = currentDir.findChild("$searchPart.json") ?: return
-            fileSuggestions(result, currentDir, memberType, memberName)
+            fileSuggestions(result, currentDir, memberName)
         } else {
             folderSuggestions(result, searchPart, currentDir)
         }
         result.restartCompletionOnAnyPrefixChange()
     }
 
-    private fun fileSuggestions(result: CompletionResultSet, currentDir: VirtualFile, type: String, typeName: String?) {
+    private fun fileSuggestions(result: CompletionResultSet, currentDir: VirtualFile, typeName: String?) {
         val resultSetWithPrefix = result.withPrefixMatcher(PlainPrefixMatcher(typeName ?: "", true))
         val content = Json.parseToJsonElement(currentDir.readText()).jsonObject
-        val typeContent = content[if (type == METHODS_PREFIX) "methods" else "fields"]?.jsonArray ?: return
+        val methods = content["methods"]?.jsonArray ?: emptyList()
+        val fields = content["fields"]?.jsonArray ?: emptyList()
         resultSetWithPrefix.addAllElements(
-            typeContent.map { element ->
+            fields.map { element ->
                 element.jsonObject["name"]?.let {
                     LookupElementBuilder.create(it.jsonPrimitive.content)
-                        .withIcon(if (type == METHODS_PREFIX) PlatformIcons.METHOD_ICON else PlatformIcons.FIELD_ICON)
+                        .withIcon(PlatformIcons.FIELD_ICON)
+                        .withInsertHandler { ctx, _ ->
+                            AutoPopupController.getInstance(ctx.project).scheduleAutoPopup(ctx.editor)
+                        }
+                }
+            }
+        )
+        resultSetWithPrefix.addAllElements(
+            methods.map { element ->
+                element.jsonObject["name"]?.let {
+                    LookupElementBuilder.create(it.jsonPrimitive.content)
+                        .withIcon(PlatformIcons.METHOD_ICON)
                         .withInsertHandler { ctx, _ ->
                             AutoPopupController.getInstance(ctx.project).scheduleAutoPopup(ctx.editor)
                         }
@@ -94,21 +101,11 @@ class LibraryIndexCompletionProvider : CompletionProvider<CompletionParameters>(
             val content = Json.parseToJsonElement(it.readText()).jsonObject
             val methods = content["methods"]?.jsonArray?.isNotEmpty() ?: false
             val fields = content["fields"]?.jsonArray?.isNotEmpty() ?: false
-            if(methods){
+            if(methods || fields){
                 specialSymbolsResult.addElement(
                     PrioritizedLookupElement.withPriority(
-                        LookupElementBuilder.create(METHODS_PREFIX).withLookupString("$searchPart$METHODS_PREFIX").withTypeText(METHODS_PREFIX)
-                            .withIcon(PlatformIcons.METHOD_ICON).withPresentableText("methods").withInsertHandler { ctx, _ ->
-                                AutoPopupController.getInstance(ctx.project).scheduleAutoPopup(ctx.editor)
-                            }, 100.0
-                    )
-                )
-            }
-            if(fields){
-                specialSymbolsResult.addElement(
-                    PrioritizedLookupElement.withPriority(
-                        LookupElementBuilder.create(FIELDS_PREFIX).withLookupString("$searchPart$FIELDS_PREFIX").withTypeText(FIELDS_PREFIX)
-                            .withIcon(PlatformIcons.FIELD_ICON).withPresentableText("fields").withInsertHandler { ctx, _ ->
+                        LookupElementBuilder.create(MEMBER_PREFIX).withLookupString("$searchPart$MEMBER_PREFIX").withTypeText(MEMBER_PREFIX)
+                            .withIcon(AllIcons.Nodes.MultipleTypeDefinitions).withPresentableText("members").withInsertHandler { ctx, _ ->
                                 AutoPopupController.getInstance(ctx.project).scheduleAutoPopup(ctx.editor)
                             }, 100.0
                     )
