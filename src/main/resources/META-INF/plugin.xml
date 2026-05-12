@@ -8,16 +8,19 @@
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.java</depends>
     <depends>org.intellij.plugins.markdown</depends>
     <resource-bundle>messages.MyBundle</resource-bundle>
 
+    <extensions defaultExtensionNs="org.intellij.markdown">
+        <flavourProvider implementation="com.jimmy474.indexerautocomplete.plugin.IndexReferenceMarkdownFlavour"/>
+    </extensions>
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow factoryClass="com.jimmy474.indexerautocomplete.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
         <postStartupActivity implementation="com.jimmy474.indexerautocomplete.startup.MyProjectActivity" />
-        <completion.contributor implementationClass="com.jimmy474.indexerautocomplete.plugin.MyCompletionContributor"
-                                language="any"/>
-    </extensions>
-    <extensions defaultExtensionNs="com.intellij">
-        <annotator language="Markdown" implementationClass="com.jimmy474.indexerautocomplete.plugin.MyPathAnnotator"/>
+        <lang.parserDefinition order="first" language="Markdown" implementationClass="com.jimmy474.indexerautocomplete.plugin.LibraryIndexParserDefinition"/>
+        <completion.contributor language="Markdown" implementationClass="com.jimmy474.indexerautocomplete.plugin.LibraryIndexCompletionContributor"/>
+        <annotator language="Markdown" implementationClass="com.jimmy474.indexerautocomplete.plugin.LibraryIndexAnnotator"/>
+        <psi.referenceContributor language="Markdown" implementation="com.jimmy474.indexerautocomplete.plugin.LibraryReferenceContributor"/>
     </extensions>
 </idea-plugin>
