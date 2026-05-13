@@ -25,11 +25,14 @@ class LibraryIndexFoldingBuilder : FoldingBuilderEx() {
 
     override fun getPlaceholderText(node: ASTNode): String? {
         val element = node.psi as? LibraryIndexPsiElement ?: return null
-        val regex = LibraryIndexCompletionProvider.INDEX_REFERENCE_PATH_REGEX
+        val regex = LibraryIndexCompletionProvider.INDEX_REFERENCE_FULL_REGEX
         val match = regex.find(element.text) ?: return null
         val indexReference = match.toIndexReference()
 
-        return when (val resolved = element.references.firstOrNull()?.resolve()) {
+        val resolvedTargets = element.references.mapNotNull { it.resolve() }
+        val resolved = resolvedTargets.firstOrNull { it is PsiMethod || it is PsiField } ?: resolvedTargets.firstOrNull { it is PsiClass }
+
+        return when (resolved) {
             is PsiMethod -> {
                 val className = resolved.containingClass?.name ?: ""
                 val methodName = resolved.name

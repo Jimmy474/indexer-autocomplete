@@ -32,7 +32,8 @@ class LibraryIndexCompletionProvider : CompletionProvider<CompletionParameters>(
 
         val INDEX_REFERENCE_PATH_REGEX = Regex("($VALID_ID(\\.$VALID_ID)*)($MEMBER_PREFIX($VALID_ID)?(\\((\\.{3})?\\))?)?")
 
-        val INDEX_REFERENCE_FULL_REGEX = Regex("^$PREFIX`$INDEX_REFERENCE_PATH_REGEX`$")
+        val INDEX_REFERENCE_PREFIXED_REGEX = Regex("$PREFIX`$INDEX_REFERENCE_PATH_REGEX`")
+        val INDEX_REFERENCE_FULL_REGEX = Regex("^$INDEX_REFERENCE_PREFIXED_REGEX$")
     }
 
     override fun addCompletions(parameters: CompletionParameters, context: ProcessingContext, result: CompletionResultSet) {
@@ -86,6 +87,8 @@ class LibraryIndexCompletionProvider : CompletionProvider<CompletionParameters>(
                     LookupElementBuilder.create(it.jsonPrimitive.content)
                         .withIcon(PlatformIcons.METHOD_ICON)
                         .withInsertHandler { ctx, _ ->
+                            ctx.document.insertString(ctx.selectionEndOffset, "()")
+                            ctx.editor.caretModel.moveToOffset(ctx.selectionEndOffset)
                             AutoPopupController.getInstance(ctx.project).scheduleAutoPopup(ctx.editor)
                         }
                 }
@@ -125,8 +128,7 @@ class LibraryIndexCompletionProvider : CompletionProvider<CompletionParameters>(
             val lookupElement = LookupElementBuilder.create(child, name).withIcon(icon).withInsertHandler { ctx, item ->
                 val child = item.`object` as? VirtualFile ?: return@withInsertHandler
                 if (child.isDirectory) {
-                    val document = ctx.document
-                    document.insertString(ctx.selectionEndOffset, ".")
+                    ctx.document.insertString(ctx.selectionEndOffset, ".")
                     ctx.editor.caretModel.moveToOffset(ctx.selectionEndOffset)
                 }
                 AutoPopupController.getInstance(ctx.project).scheduleAutoPopup(ctx.editor)

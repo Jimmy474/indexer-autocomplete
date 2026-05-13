@@ -13,12 +13,7 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiManager
 import com.intellij.psi.util.CachedValueProvider
 import com.intellij.psi.util.CachedValuesManager
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.boolean
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.*
 import org.intellij.plugins.markdown.lang.psi.impl.MarkdownFile
 
 object LibraryIndexColors {
@@ -100,8 +95,8 @@ class LibraryIndexAnnotator : Annotator {
         }
 
         var current: VirtualFile = root
-        for ((index, part) in indexReference.packages.withIndex()) {
-            val isLastPart = index == indexReference.packages.lastIndex
+        for ((index, part) in indexReference.fqn.withIndex()) {
+            val isLastPart = index == indexReference.fqn.lastIndex
 
             val next = if (isLastPart && indexReference.memberType != IndexReference.MemberType.NONE) {
                 current.findChild("$part.json")

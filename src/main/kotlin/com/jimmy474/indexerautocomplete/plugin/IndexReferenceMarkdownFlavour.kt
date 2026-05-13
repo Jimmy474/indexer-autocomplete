@@ -5,9 +5,10 @@ import com.intellij.psi.FileViewProvider
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiReference
 import com.intellij.psi.impl.source.resolve.reference.ReferenceProvidersRegistry
+import com.intellij.usages.impl.rules.UsageType
+import com.intellij.usages.impl.rules.UsageTypeProvider
 import org.intellij.markdown.IElementType
 import org.intellij.markdown.MarkdownElementType
-import org.intellij.markdown.MarkdownElementTypes
 import org.intellij.markdown.MarkdownTokenTypes
 import org.intellij.markdown.ast.ASTNode
 import org.intellij.markdown.ast.getTextInNode
@@ -26,7 +27,7 @@ import org.intellij.plugins.markdown.lang.parser.MarkdownFlavourProvider
 import org.intellij.plugins.markdown.lang.parser.MarkdownParserDefinition
 import org.intellij.plugins.markdown.lang.psi.impl.MarkdownCompositePsiElementBase
 
-val CUSTOM_TOKEN: IElementType = MarkdownElementType("INDEX_REFERENCE")
+val LIBRARY_INDEX_REFERENCE: IElementType = MarkdownElementType("INDEX_REFERENCE")
 
 class IndexReferenceMarkdownFlavour: MarkdownFlavourProvider {
 
@@ -42,7 +43,7 @@ class IndexReferenceMarkdownFlavour: MarkdownFlavourProvider {
 
         override fun createHtmlGeneratingProviders(linkMap: LinkMap, baseURI: URI?): Map<IElementType, GeneratingProvider> {
             val providers = flavour.createHtmlGeneratingProviders(linkMap, baseURI).toMutableMap()
-            providers[CUSTOM_TOKEN] = object : GeneratingProvider {
+            providers[LIBRARY_INDEX_REFERENCE] = object : GeneratingProvider {
                 override fun processNode(visitor: HtmlGenerator.HtmlGeneratingVisitor, text: String, node: ASTNode) {
                     visitor.consumeTagOpen(node, "span", "class=\"index-reference\"")
                     visitor.consumeHtml(node.getTextInNode(text).substring(2, node.getTextInNode(text).length - 1))
@@ -71,7 +72,7 @@ class IndexReferenceSequentialParser : SequentialParser {
                     if(iterator.end == nextIterator.start) {
                         val endIterator = findOfSize(nextIterator.advance(), getLength(nextIterator, true))
                         if (endIterator != null) {
-                            result.withNode(SequentialParser.Node(nextIterator.index - 1..endIterator.index + 1, CUSTOM_TOKEN))
+                            result.withNode(SequentialParser.Node(nextIterator.index - 1..endIterator.index + 1, LIBRARY_INDEX_REFERENCE))
                             iterator = endIterator.advance()
                             continue
                         }
@@ -117,7 +118,7 @@ class IndexReferenceSequentialParser : SequentialParser {
 
 class LibraryIndexParserDefinition: MarkdownParserDefinition() {
     override fun createElement(node: com.intellij.lang.ASTNode): PsiElement {
-        if(node.elementType.toString().endsWith(CUSTOM_TOKEN.toString())){
+        if(node.elementType.toString().endsWith(LIBRARY_INDEX_REFERENCE.toString())){
             return LibraryIndexPsiElement(node)
         }
         return super.createElement(node)
@@ -128,5 +129,13 @@ class LibraryIndexPsiElement(node: com.intellij.lang.ASTNode): MarkdownComposite
     override fun getPresentableTagName(): String = "LibraryIndexPsiElement"
     override fun getReferences(): Array<out PsiReference> {
         return ReferenceProvidersRegistry.getReferencesFromProviders(this)
+    }
+}
+
+val LIBRARY_USAGE_TYPE = UsageType { "LibraryIndex" }
+
+class LibraryIndexUsageTypeProvider: UsageTypeProvider{
+    override fun getUsageType(element: PsiElement): UsageType? {
+        return if(element !is LibraryIndexPsiElement) null else LIBRARY_USAGE_TYPE
     }
 }

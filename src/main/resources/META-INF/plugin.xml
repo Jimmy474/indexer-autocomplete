@@ -23,7 +23,10 @@
         <annotator language="Markdown" implementationClass="com.jimmy474.indexerautocomplete.plugin.LibraryIndexAnnotator"/>
         <psi.referenceContributor language="Markdown" implementation="com.jimmy474.indexerautocomplete.plugin.LibraryReferenceContributor"/>
         <codeInsight.lineMarkerProvider language="Markdown" implementationClass="com.jimmy474.indexerautocomplete.plugin.LibraryIndexLineMarkerProvider" />
-<!--        <codeInsight.inlayProvider language="Markdown" implementationClass="com.jimmy474.indexerautocomplete.plugin.LibraryIndexInlayHintsProvider" />-->
-        <lang.foldingBuilder language="Markdown" implementationClass="com.jimmy474.indexerautocomplete.plugin.LibraryIndexFoldingBuilder" />
+        <lang.foldingBuilder order="first" language="Markdown" implementationClass="com.jimmy474.indexerautocomplete.plugin.LibraryIndexFoldingBuilder" />
+        <referencesSearch order="first" implementation="com.jimmy474.indexerautocomplete.plugin.LibraryMarkdownUsageSearcher"/>
+        <methodReferencesSearch order="first" implementation="com.jimmy474.indexerautocomplete.plugin.LibraryMarkdownMethodUsageSearcher"/>
+        <usageTypeProvider order="first" implementation="com.jimmy474.indexerautocomplete.plugin.LibraryIndexUsageTypeProvider"/>
+        <fileBasedIndex implementation="com.jimmy474.indexerautocomplete.plugin.LibraryMarkdownReferenceIndex"/>
     </extensions>
 </idea-plugin>

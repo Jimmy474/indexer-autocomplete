@@ -62,12 +62,12 @@ class MyPluginTest : BasePlatformTestCase() {
         assertNullOrEmpty(suggestions)
     }
 
-    fun `test Method and Field Symbols Suggestions`() {
+    fun `test Member Symbol Suggestion`() {
         myFixture.configureByText("symbols.md", "@`net.fabricmc.SomeClass<caret>`")
         myFixture.completeBasic()
 
         val suggestions = myFixture.lookupElementStrings ?: emptyList()
-        assertContainsElements(suggestions, "#", "$")
+        assertSameElements(suggestions, "#")
     }
 
     fun `test Method Completion`() {
@@ -87,7 +87,7 @@ class MyPluginTest : BasePlatformTestCase() {
     }
 
     fun `test Field Completion`() {
-        myFixture.configureByText("field_completion.md", "@`net.fabricmc.SomeClass$<caret>`")
+        myFixture.configureByText("field_completion.md", "@`net.fabricmc.SomeClass#<caret>`")
         myFixture.completeBasic()
 
         val suggestions = myFixture.lookupElementStrings ?: emptyList()
@@ -215,12 +215,11 @@ class MyPluginTest : BasePlatformTestCase() {
         myFixture.checkResult("@`net.fa`")
     }
 
-    fun `test Dollar Triggers Field Suggestions`() {
+    fun `test Dollar Does Not Trigger Field Suggestions`() {
         myFixture.configureByText("field_trigger.md", "@`net.fabricmc.SomeClass$<caret>`")
         myFixture.completeBasic()
 
-        val suggestions = myFixture.lookupElementStrings ?: emptyList()
-        assertContainsElements(suggestions, "name")
+        assertNullOrEmpty(myFixture.lookupElementStrings)
     }
 
     fun `test Missing Intermediate Folder`() {
@@ -269,13 +268,61 @@ class MyPluginTest : BasePlatformTestCase() {
     }
 
     fun `test Invalid Path Shows Error`() {
-        myFixture.configureByText("test.md", "@`invalid.path<caret>`")
-        myFixture.doHighlighting()
+        myFixture.configureByText("test.md", "@`does.not.exist<caret>`")
 
         val highlights = myFixture.doHighlighting()
-        val error = highlights.find { it.description == "Path segment 'invalid' not found" }
+        val error = highlights.find { it.description == "Package or Class 'does' not found" }
 
         assertNotNull("Should find an error squiggle for invalid path", error)
+        assertEquals(HighlightSeverity.ERROR, error?.severity)
+    }
+
+    fun `test Malformed Reference Shows Error`() {
+        myFixture.configureByText("test.md", "@`invalid^path<caret>`")
+
+        val highlights = myFixture.doHighlighting()
+        val error = highlights.find { it.description == "Malformed library reference syntax" }
+
+        assertNotNull("Should find an error squiggle for malformed syntax", error)
+        assertEquals(HighlightSeverity.ERROR, error?.severity)
+    }
+
+    fun `test Empty Member Reference Shows Error`() {
+        myFixture.configureByText("test.md", "@`net.fabricmc.SomeClass#<caret>`")
+
+        val highlights = myFixture.doHighlighting()
+        val error = highlights.find { it.description == "Reference cannot end with '#'. Expected a name." }
+
+        assertNotNull("Should find an error squiggle for an empty member reference", error)
+        assertEquals(HighlightSeverity.ERROR, error?.severity)
+    }
+
+    fun `test Missing Method Shows Error`() {
+        myFixture.configureByText("test.md", "@`net.fabricmc.SomeClass#missing()<caret>`")
+
+        val highlights = myFixture.doHighlighting()
+        val error = highlights.find { it.description == "Method 'missing' not found in SomeClass Class" }
+
+        assertNotNull("Should find an error squiggle for a missing method", error)
+        assertEquals(HighlightSeverity.ERROR, error?.severity)
+    }
+
+    fun `test Missing Field Shows Error`() {
+        myFixture.configureByText("test.md", "@`net.fabricmc.SomeClass#missing<caret>`")
+
+        val highlights = myFixture.doHighlighting()
+        val error = highlights.find { it.description == "Field 'missing' not found in SomeClass Class" }
+
+        assertNotNull("Should find an error squiggle for a missing field", error)
+        assertEquals(HighlightSeverity.ERROR, error?.severity)
+    }
+
+    fun `test Hyphenated Reference Show Error`() {
+        myFixture.configureByText("test.md", "@`special.my-class<caret>`")
+
+        val error = myFixture.doHighlighting().find { it.description == "Malformed library reference syntax" }
+
+        assertNotNull("Should find an error squiggle for using hyphen", error)
         assertEquals(HighlightSeverity.ERROR, error?.severity)
     }
 
