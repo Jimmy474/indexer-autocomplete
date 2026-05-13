@@ -39,7 +39,8 @@ class LibraryIndexFoldingBuilder : FoldingBuilderEx() {
                 val params = resolved.parameterList.parameters.joinToString(", ") {
                     it.type.presentableText + " " + it.name
                 }
-                "$className.$methodName(${if(indexReference.fullDisplayFlag) params else ""})"
+                if(indexReference.isConstructor) "$className(${if (indexReference.fullDisplayFlag) params else ""})"
+                else "$className.$methodName(${if(indexReference.fullDisplayFlag) params else ""})"
             }
             is PsiField -> {
                 val className = resolved.containingClass?.name ?: ""

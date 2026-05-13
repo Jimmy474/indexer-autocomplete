@@ -1,0 +1,40 @@
+<html lang="en">
+<body>
+<p>
+    Detects unresolved or malformed library index references in Markdown files.
+</p>
+<p>
+    This inspection parses custom macro syntax and validates the fully qualified names against the project's generated JSON library index. It highlights missing packages, unresolved classes, non-existent methods or fields, and structural syntax errors (such as trailing member prefixes).
+</p>
+<p>
+    When an unresolved reference or typo is detected, the inspection provides quick fixes to automatically correct the class, package, or member name based on the closest available match in the index.
+</p>
+<p>
+    <b>Incorrect code:</b>
+</p>
+<pre><code>
+<!-- Package or Class not found -->
+Check out the @`com.example.TypoClass` utility.
+
+    <!-- Method or Field not found -->
+Call @`com.example.MathUtil#calculte` to compute the value.
+
+    <!-- Malformed syntax (Trailing prefix) -->
+See the @`com.example.MathUtil#` documentation.`
+</code></pre>
+<p>
+    <b>Correct code:</b>
+</p>
+<pre><code>
+Check out the @`com.example.ActualClass` utility.
+
+Call @`com.example.MathUtil#calculate` to compute the value.
+
+See the @`com.example.MathUtil` documentation.
+</code></pre>
+<!-- tooltip end -->
+<p>
+    <b>Note:</b> This inspection requires the <code>library-index-dependency</code> directory to be present in the project root containing the generated JSON metadata. If this directory is missing, the inspection will flag the elements with a project-wide warning.
+</p>
+</body>
+</html>

@@ -25,6 +25,9 @@ class LibraryIndexCompletionContributor : CompletionContributor() {
 
 class LibraryIndexCompletionProvider : CompletionProvider<CompletionParameters>() {
 
+    /*
+    * Hardcoded references to these symbols are present in "src/main/resources/inspectionDescriptions/LibraryIndex.html" remember to update that there.
+    */
     companion object {
         const val PREFIX = "@"
         const val MEMBER_PREFIX = "#"

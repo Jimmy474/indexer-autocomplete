@@ -1,6 +1,14 @@
 package com.jimmy474.indexerautocomplete.plugin
 
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.psi.PsiManager
+import com.intellij.psi.util.CachedValueProvider
+import com.intellij.psi.util.CachedValuesManager
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 
 data class IndexReference(
     val fqn: List<String>,
@@ -9,7 +17,8 @@ data class IndexReference(
     val memberName: String?,
     val memberNameRange: TextRange? = null,
     val memberType: MemberType = MemberType.NONE,
-    val fullDisplayFlag: Boolean = false
+    val fullDisplayFlag: Boolean = false,
+    val isConstructor: Boolean = false,
 ){
     enum class MemberType {
         NONE,
@@ -34,11 +43,35 @@ fun MatchResult.toIndexReference(): IndexReference {
             this.groups[4]!!.range.last + 1
         )
     }
-    val memberType = this.groupValues[3].ifBlank{null} ?.let{
+    val isConstructor = memberName == null && this.groupValues[5].isNotBlank()
+    val memberType = if(isConstructor) IndexReference.MemberType.METHOD else this.groupValues[3].ifBlank{null} ?.let{
         this.groupValues[5].ifBlank{ null }?.let { IndexReference.MemberType.METHOD } ?: IndexReference.MemberType.FIELD
     } ?: IndexReference.MemberType.NONE
     val fullDisplayFlag = this.groupValues[6].isNotBlank()
-    return IndexReference(fqn, className, classNameRange, memberName, memberNameRange, memberType, fullDisplayFlag)
+    return IndexReference(fqn, className, classNameRange, memberName, memberNameRange, memberType, fullDisplayFlag, isConstructor)
+}
+
+fun getCachedJson(file: VirtualFile, project: Project): JsonObject? {
+    val psiFile = PsiManager.getInstance(project).findFile(file) ?: return null
+
+    return CachedValuesManager.getCachedValue(psiFile) {
+        val jsonText = psiFile.text
+        val jsonObject = try {
+            Json.parseToJsonElement(jsonText).jsonObject
+        } catch (_: Exception) {
+            null
+        }
+        CachedValueProvider.Result.create(jsonObject, psiFile)
+    }
+}
+
+fun getPackageOrClassFixSuggestions(current: VirtualFile, part: String): List<Pair<String, Boolean>>{
+    val availableNames = current.children
+        .filter { it.isDirectory || it.extension == "json" }
+        .map { it.nameWithoutExtension to it.isDirectory }
+        .distinct()
+
+    return availableNames.sortedBy { levenshtein(it.first, part) }.take(3)
 }
 
 fun levenshtein(lhs: CharSequence, rhs: CharSequence): Int {
