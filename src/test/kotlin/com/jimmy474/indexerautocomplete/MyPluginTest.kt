@@ -291,7 +291,7 @@ class MyPluginTest : BasePlatformTestCase() {
         myFixture.configureByText("test.md", "@`net.fabricmc.SomeClass#<caret>`")
 
         val highlights = myFixture.doHighlighting()
-        val error = highlights.find { it.description == "Reference cannot end with '#'. Expected a name." }
+        val error = highlights.find { it.description == "Reference cannot end with '#', Expected a member name" }
 
         assertNotNull("Should find an error squiggle for an empty member reference", error)
         assertEquals(HighlightSeverity.ERROR, error?.severity)

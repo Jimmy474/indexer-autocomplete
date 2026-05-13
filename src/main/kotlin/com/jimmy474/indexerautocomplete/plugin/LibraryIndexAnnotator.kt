@@ -1,15 +1,20 @@
 package com.jimmy474.indexerautocomplete.plugin
 
+import com.intellij.codeInsight.AutoPopupController
+import com.intellij.codeInspection.LocalQuickFixAndIntentionActionOnPsiElement
 import com.intellij.lang.annotation.AnnotationHolder
 import com.intellij.lang.annotation.Annotator
 import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.openapi.editor.DefaultLanguageHighlighterColors
+import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.colors.TextAttributesKey
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.guessProjectDir
 import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
 import com.intellij.psi.util.CachedValueProvider
 import com.intellij.psi.util.CachedValuesManager
@@ -90,14 +95,18 @@ class LibraryIndexAnnotator : Annotator {
         val indexReference = match.toIndexReference()
 
         if (indexReference.memberType != IndexReference.MemberType.NONE && indexReference.memberName.isNullOrBlank()) {
-            holder.newAnnotation(HighlightSeverity.ERROR, "Reference cannot end with '${LibraryIndexCompletionProvider.MEMBER_PREFIX}'. Expected a name.").range(element.textRange).create()
+            holder.newAnnotation(HighlightSeverity.ERROR, "Reference cannot end with '${LibraryIndexCompletionProvider.MEMBER_PREFIX}', Expected a member name")
+                .range(TextRange(endOffset - 2, endOffset - 1))
+                .withFix(RemoveTrailingPrefixFix(element))
+                .create()
             return
         }
 
+        var currentPartAbsoluteStart = startOffset + 2
         var current: VirtualFile = root
         for ((index, part) in indexReference.fqn.withIndex()) {
             val isLastPart = index == indexReference.fqn.lastIndex
-
+            val partAbsoluteRange = TextRange(currentPartAbsoluteStart, currentPartAbsoluteStart + part.length)
             val next = if (isLastPart && indexReference.memberType != IndexReference.MemberType.NONE) {
                 current.findChild("$part.json")
             } else if (isLastPart) {
@@ -107,11 +116,25 @@ class LibraryIndexAnnotator : Annotator {
             }
 
             if (next == null) {
-                holder.newAnnotation(HighlightSeverity.ERROR, "Package or Class '$part' not found")
-                    .range(element.textRange).create()
+                val annotationBuilder = holder.newAnnotation(HighlightSeverity.ERROR, "Package or Class '$part' not found").range(partAbsoluteRange)
+                val availableNames = current.children
+                    .filter { it.isDirectory || it.extension == "json" }
+                    .map { it.nameWithoutExtension to it.isDirectory }
+                    .distinct()
+
+                val typoFixes = availableNames
+                    .sortedBy { levenshtein(it.first, part) }
+                    .take(3)
+
+                for (suggestedName in typoFixes) {
+                    annotationBuilder.withFix(ChangeClassOrPackageNameFix(element, partAbsoluteRange, suggestedName))
+                }
+
+                annotationBuilder.create()
                 return
             }
             current = next
+            currentPartAbsoluteStart += part.length + 1
         }
 
         if(!current.isDirectory){
@@ -131,7 +154,22 @@ class LibraryIndexAnnotator : Annotator {
 
             if (member == null) {
                 val label = if (indexReference.memberType == IndexReference.MemberType.METHOD) "Method" else "Field"
-                holder.newAnnotation(HighlightSeverity.ERROR, "$label '${indexReference.memberName}' not found in ${current.nameWithoutExtension} Class").range(element.textRange).create()
+                val annotationBuilder = holder.newAnnotation(HighlightSeverity.ERROR, "$label '${indexReference.memberName}' not found in ${current.nameWithoutExtension} Class").range(element.textRange)
+                val availableNames = items?.mapNotNull { it.jsonObject["name"]?.jsonPrimitive?.content } ?: emptyList()
+
+                val typoFixes = availableNames
+                    .sortedBy { levenshtein(it, indexReference.memberName!!) }
+                    .take(3)
+
+                indexReference.memberNameRange?.let { memberRange ->
+                    val absoluteRange = TextRange(startOffset + memberRange.startOffset, startOffset + memberRange.endOffset)
+
+                    for (suggestedName in typoFixes) {
+                        annotationBuilder.withFix(ChangeMemberNameFix(element, absoluteRange, suggestedName))
+                    }
+                }
+
+                annotationBuilder.create()
                 return
             }
 
@@ -165,6 +203,59 @@ class LibraryIndexAnnotator : Annotator {
                 null
             }
             CachedValueProvider.Result.create(jsonObject, psiFile)
+        }
+    }
+}
+
+class ChangeMemberNameFix(
+    element: PsiElement,
+    private val absoluteRangeToReplace: TextRange,
+    private val suggestedName: String,
+) : LocalQuickFixAndIntentionActionOnPsiElement(element) {
+    override fun getFamilyName(): String = "LibraryIndexCorrections"
+    override fun getText(): String = "Change Member name to '$suggestedName'"
+    override fun invoke(project: Project, file: PsiFile, editor: Editor?, startElement: PsiElement, endElement: PsiElement) {
+        val document = file.viewProvider.document ?: return
+        document.replaceString(absoluteRangeToReplace.startOffset, absoluteRangeToReplace.endOffset, suggestedName)
+        PsiDocumentManager.getInstance(project).commitDocument(document)
+    }
+}
+
+class ChangeClassOrPackageNameFix(
+    element: PsiElement,
+    private val absoluteRangeToReplace: TextRange,
+    private val suggestedName: Pair<String, Boolean>,
+) : LocalQuickFixAndIntentionActionOnPsiElement(element) {
+    override fun getFamilyName(): String = "LibraryIndexCorrections"
+    override fun getText(): String = "Change ${if(suggestedName.second) "Package" else "Class"} name to '${suggestedName.first}'"
+    override fun invoke(project: Project, file: PsiFile, editor: Editor?, startElement: PsiElement, endElement: PsiElement) {
+        val document = file.viewProvider.document ?: return
+        val replacement = "${suggestedName.first}${if (suggestedName.second) "." else ""}"
+        document.replaceString(absoluteRangeToReplace.startOffset, absoluteRangeToReplace.endOffset, replacement)
+        editor?.let {
+            it.caretModel.moveToOffset(absoluteRangeToReplace.startOffset + replacement.length)
+            if(suggestedName.second){
+                AutoPopupController.getInstance(project).scheduleAutoPopup(it)
+            }
+        }
+        PsiDocumentManager.getInstance(project).commitDocument(document)
+    }
+}
+
+class RemoveTrailingPrefixFix(element: PsiElement) : LocalQuickFixAndIntentionActionOnPsiElement(element) {
+    override fun getFamilyName(): String = "LibraryIndexCorrections"
+    override fun getText(): String = "Remove trailing '${LibraryIndexCompletionProvider.MEMBER_PREFIX}'"
+    override fun invoke(project: Project, file: PsiFile, editor: Editor?, startElement: PsiElement, endElement: PsiElement) {
+        val document = file.viewProvider.document ?: return
+        val elementText = startElement.text
+        val prefix = LibraryIndexCompletionProvider.MEMBER_PREFIX
+
+        val lastIndex = elementText.lastIndexOf(prefix)
+        if (lastIndex != -1) {
+            val absoluteStart = startElement.textRange.startOffset + lastIndex
+            val absoluteEnd = startElement.textRange.endOffset - 1
+            document.deleteString(absoluteStart, absoluteEnd)
+            PsiDocumentManager.getInstance(project).commitDocument(document)
         }
     }
 }
