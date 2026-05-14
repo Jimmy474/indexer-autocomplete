@@ -23,30 +23,16 @@ class LibraryIndexCompletionContributor : CompletionContributor() {
     }
 }
 
+
 class LibraryIndexCompletionProvider : CompletionProvider<CompletionParameters>() {
-
-    /*
-    * Hardcoded references to these symbols are present in "src/main/resources/inspectionDescriptions/LibraryIndex.html" remember to update that there.
-    */
-    companion object {
-        const val PREFIX = "@"
-        const val MEMBER_PREFIX = "#"
-        const val VALID_ID = "[a-zA-Z_$][a-zA-Z0-9_$]*"
-
-        val INDEX_REFERENCE_PATH_REGEX = Regex("($VALID_ID(\\.$VALID_ID)*)($MEMBER_PREFIX($VALID_ID)?(\\((\\.{3})?\\))?)?")
-
-        val INDEX_REFERENCE_PREFIXED_REGEX = Regex("$PREFIX`$INDEX_REFERENCE_PATH_REGEX`")
-        val INDEX_REFERENCE_FULL_REGEX = Regex("^$INDEX_REFERENCE_PREFIXED_REGEX$")
-    }
-
     override fun addCompletions(parameters: CompletionParameters, context: ProcessingContext, result: CompletionResultSet) {
         val libraryElement = parameters.position.parent ?: return
         val projectDir = parameters.position.project.guessProjectDir() ?: return
         val root = projectDir.findChild("library-index-dependency") ?: return
         if (!root.isDirectory) return
 
-        val path = parameters.originalFile.text.substring(libraryElement.textRange.startOffset, parameters.offset).removePrefix("${PREFIX}`").trim()
-        val memberType = if(path.contains(MEMBER_PREFIX)) MEMBER_PREFIX else null
+        val path = parameters.originalFile.text.substring(libraryElement.textRange.startOffset, parameters.offset).removePrefix("${LibraryIndex.PREFIX}`").trim()
+        val memberType = if(path.contains(LibraryIndex.MEMBER_PREFIX)) LibraryIndex.MEMBER_PREFIX else null
         val memberName = memberType?.let { path.substringAfterLast(it) }
         val pathText = memberType?.let { path.substringBeforeLast(it) } ?: path
         val parts = pathText.split('.')
@@ -110,7 +96,7 @@ class LibraryIndexCompletionProvider : CompletionProvider<CompletionParameters>(
             if(methods || fields){
                 specialSymbolsResult.addElement(
                     PrioritizedLookupElement.withPriority(
-                        LookupElementBuilder.create(MEMBER_PREFIX).withLookupString("$searchPart$MEMBER_PREFIX").withTypeText(MEMBER_PREFIX)
+                        LookupElementBuilder.create(LibraryIndex.MEMBER_PREFIX).withLookupString("$searchPart${LibraryIndex.MEMBER_PREFIX}").withTypeText(LibraryIndex.MEMBER_PREFIX)
                             .withIcon(AllIcons.Nodes.MultipleTypeDefinitions).withPresentableText("members").withInsertHandler { ctx, _ ->
                                 AutoPopupController.getInstance(ctx.project).scheduleAutoPopup(ctx.editor)
                             }, 100.0

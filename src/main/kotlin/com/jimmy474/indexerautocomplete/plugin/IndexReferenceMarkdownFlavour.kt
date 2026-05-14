@@ -66,7 +66,7 @@ class IndexReferenceSequentialParser : SequentialParser {
         var iterator: TokensCache.Iterator = tokens.RangesListIterator(rangesToGlue)
 
         while (iterator.type != null) {
-            if(iterator.type == MarkdownTokenTypes.TEXT && tokens.originalText.subSequence(iterator.start,iterator.end).contentEquals(LibraryIndexCompletionProvider.PREFIX)){
+            if(iterator.type == MarkdownTokenTypes.TEXT && tokens.originalText.subSequence(iterator.start,iterator.end).contentEquals(LibraryIndex.PREFIX)){
                 val nextIterator = iterator.advance()
                 if (nextIterator.type == MarkdownTokenTypes.BACKTICK || nextIterator.type == MarkdownTokenTypes.ESCAPED_BACKTICKS) {
                     if(iterator.end == nextIterator.start) {

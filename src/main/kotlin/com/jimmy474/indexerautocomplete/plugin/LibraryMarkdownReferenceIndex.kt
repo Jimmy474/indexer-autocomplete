@@ -23,13 +23,13 @@ class LibraryMarkdownReferenceIndex : ScalarIndexExtension<String>() {
             val text = inputData.contentAsText
             val map = mutableMapOf<String, Void?>()
 
-            val regex = LibraryIndexCompletionProvider.INDEX_REFERENCE_PREFIXED_REGEX
+            val regex = Regex(LibraryIndex.INDEX_REFERENCE_PATTERN)
 
             for (match in regex.findAll(text)) {
                 val indexReference = match.toIndexReference()
 
-                indexReference.className?.let { map[it] = null }
-                indexReference.memberName?.let { map[it] = null }
+                indexReference.className?.value?.let { map[it] = null }
+                indexReference.memberName?.value?.let { map[it] = null }
             }
 
             map

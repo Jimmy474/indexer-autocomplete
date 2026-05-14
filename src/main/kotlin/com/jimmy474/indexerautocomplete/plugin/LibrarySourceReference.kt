@@ -18,20 +18,20 @@ class LibraryReferenceProvider: PsiReferenceProvider(){
         if (element.containingFile !is MarkdownFile) return emptyArray()
         if (element !is LibraryIndexPsiElement) return emptyArray()
 
-        val regex = LibraryIndexCompletionProvider.INDEX_REFERENCE_FULL_REGEX
-        val match = regex.find(element.text) ?: return emptyArray()
+        val regex = LibraryIndex.INDEX_REFERENCE_REGEX
+        val match = regex.matchEntire(element.text) ?: return emptyArray()
         val indexReference = match.toIndexReference()
-        val fqn = indexReference.fqn.joinToString(".")
+        val fqn = indexReference.fqn.value
 
         val refs: MutableList<PsiReference> = mutableListOf()
         if(indexReference.memberType != IndexReference.MemberType.NONE && indexReference.memberName != null){
-            refs.add(LibrarySourceReference(element, indexReference.memberNameRange!!, fqn, indexReference.memberType, indexReference.memberName))
+            refs.add(LibrarySourceReference(element, indexReference.memberName.relativeRange, fqn, indexReference.memberType, indexReference.memberName.value))
         }
-        if(indexReference.isConstructor){
-            val range = TextRange(indexReference.classNameRange!!.endOffset + 2, indexReference.classNameRange.endOffset + 4)
-            refs.add(LibrarySourceReference(element, range, fqn, IndexReference.MemberType.METHOD, "<init>"))
+        if(indexReference.flags.isConstructor){
+            refs.add(LibrarySourceReference(element, indexReference.className!!.relativeRange, fqn, IndexReference.MemberType.METHOD, "<init>"))
+        }else{
+            indexReference.className?.let { refs.add(LibrarySourceReference(element, it.relativeRange, fqn, IndexReference.MemberType.NONE, null)) }
         }
-        indexReference.classNameRange?.let { refs.add(LibrarySourceReference(element, it, fqn, IndexReference.MemberType.NONE, null)) }
 
         return refs.toTypedArray()
     }

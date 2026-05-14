@@ -25,30 +25,40 @@ class LibraryIndexFoldingBuilder : FoldingBuilderEx() {
 
     override fun getPlaceholderText(node: ASTNode): String? {
         val element = node.psi as? LibraryIndexPsiElement ?: return null
-        val regex = LibraryIndexCompletionProvider.INDEX_REFERENCE_FULL_REGEX
-        val match = regex.find(element.text) ?: return null
+        val regex = LibraryIndex.INDEX_REFERENCE_REGEX
+        val match = regex.matchEntire(element.text) ?: return null
         val indexReference = match.toIndexReference()
 
         val resolvedTargets = element.references.mapNotNull { it.resolve() }
         val resolved = resolvedTargets.firstOrNull { it is PsiMethod || it is PsiField } ?: resolvedTargets.firstOrNull { it is PsiClass }
 
+        val className = when (resolved) {
+            is PsiMethod, is PsiField -> resolved.containingClass!!
+            is PsiClass -> resolved
+            else -> null
+        }?.let{
+            if(indexReference.flags.fullName) it.qualifiedName else it.name
+        } ?: ""
+
         return when (resolved) {
             is PsiMethod -> {
-                val className = resolved.containingClass?.name ?: ""
                 val methodName = resolved.name
                 val params = resolved.parameterList.parameters.joinToString(", ") {
                     it.type.presentableText + " " + it.name
                 }
-                if(indexReference.isConstructor) "$className(${if (indexReference.fullDisplayFlag) params else ""})"
-                else "$className.$methodName(${if(indexReference.fullDisplayFlag) params else ""})"
+                val paramsString = if (indexReference.flags.methodWithParams) params else ""
+                when{
+                    indexReference.flags.isConstructor ->"$className($paramsString)"
+                    indexReference.flags.shortName -> "$methodName($paramsString)"
+                    else -> "$className.$methodName($paramsString)"
+                }
             }
             is PsiField -> {
-                val className = resolved.containingClass?.name ?: ""
-                "$className.${resolved.name}"
+                if(indexReference.flags.shortName) resolved.name else "$className.${resolved.name}"
             }
-            is PsiClass -> resolved.name
+            is PsiClass -> className
             else -> {
-                element.text.removePrefix("${LibraryIndexCompletionProvider.PREFIX}`").removeSuffix("`")
+                element.text.removePrefix("${LibraryIndex.PREFIX}`").removeSuffix("`")
             }
         }
     }

@@ -11,14 +11,12 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 
 data class IndexReference(
-    val fqn: List<String>,
-    val className: String?,
-    val classNameRange: TextRange? = null,
-    val memberName: String?,
-    val memberNameRange: TextRange? = null,
+    val fullRange: TextRange,
+    val fqn: GroupInfo,
+    val className: GroupInfo?,
+    val memberName: GroupInfo?,
     val memberType: MemberType = MemberType.NONE,
-    val fullDisplayFlag: Boolean = false,
-    val isConstructor: Boolean = false,
+    val flags: Flags = Flags()
 ){
     enum class MemberType {
         NONE,
@@ -27,28 +25,66 @@ data class IndexReference(
     }
 }
 
+data class GroupInfo(
+    val value: String,
+    val relativeRange: TextRange
+)
+
+data class Flags(
+    val relativeRange: TextRange = TextRange.EMPTY_RANGE,
+    val shortName: Boolean = false,
+    val fullName: Boolean = false,
+    val methodWithParams: Boolean = false,
+    val isConstructor: Boolean = false,
+)
+
 fun MatchResult.toIndexReference(): IndexReference {
-    val fqn = this.groupValues[1].split(".")
-    val className = this.groupValues[2].ifBlank { null }?.removePrefix(".")
-    val classNameRange = this.groupValues[2].ifBlank { null }?.let {
-        TextRange(
-            this.groups[2]!!.range.first + 1,
-            this.groups[2]!!.range.last + 1
-        )
+    val fullRange = this.range.toTextRange()
+    val fqn = groups["fqn"] ?: return IndexReference(fullRange = fullRange, fqn = GroupInfo("", TextRange.EMPTY_RANGE), className = null, memberName = null)
+    val className = groups["className"]
+    val memberName = groups["memberName"]
+    val methodFlagGroup = groups["methodFlag"]
+    val methodFlag = methodFlagGroup != null
+    val isConstructor = groups["members"] == null && methodFlag
+
+    val memberType = when {
+        isConstructor -> IndexReference.MemberType.METHOD
+        memberName != null -> if (methodFlag) IndexReference.MemberType.METHOD else IndexReference.MemberType.FIELD
+        else -> IndexReference.MemberType.NONE
     }
-    val memberName = this.groupValues[4].ifBlank { null }
-    val memberNameRange = this.groupValues[4].ifBlank { null }?.let {
-        TextRange(
-            this.groups[4]!!.range.first,
-            this.groups[4]!!.range.last + 1
+
+    val memberNameRange =
+        memberName?.let {
+            if (memberType == IndexReference.MemberType.METHOD) {
+                it.range.toTextRange()..methodFlagGroup!!.range.toTextRange()
+            } else {
+                it.range.toTextRange()
+            }
+        }
+
+    val memberInfo = if (memberName != null && memberNameRange != null) GroupInfo(memberName.value, memberNameRange) else null
+    val methodWithParamsFlag = groups["methodWithParamsFlag"] != null
+    val shortNameFlag = groups["shortNameFlag"] != null
+    val fullNameFlag = groups["fullNameFlag"] != null
+
+    return IndexReference(
+        fullRange = fullRange,
+        fqn = GroupInfo(fqn.value, fqn.range.toTextRange()),
+        className = className?.let {
+            var relativeRange = it.range.toTextRange().addStart(1)
+            if(isConstructor) relativeRange = relativeRange..methodFlagGroup.range.toTextRange()
+            GroupInfo(it.value.substring(1), relativeRange)
+        },
+        memberName = memberInfo,
+        memberType = memberType,
+        flags = Flags(
+            relativeRange = groups["flags"]?.takeIf { it.value.isNotBlank() }?.range?.toTextRange() ?: TextRange.EMPTY_RANGE,
+            methodWithParams = methodWithParamsFlag,
+            isConstructor = isConstructor,
+            shortName = shortNameFlag,
+            fullName = fullNameFlag
         )
-    }
-    val isConstructor = memberName == null && this.groupValues[5].isNotBlank()
-    val memberType = if(isConstructor) IndexReference.MemberType.METHOD else this.groupValues[3].ifBlank{null} ?.let{
-        this.groupValues[5].ifBlank{ null }?.let { IndexReference.MemberType.METHOD } ?: IndexReference.MemberType.FIELD
-    } ?: IndexReference.MemberType.NONE
-    val fullDisplayFlag = this.groupValues[6].isNotBlank()
-    return IndexReference(fqn, className, classNameRange, memberName, memberNameRange, memberType, fullDisplayFlag, isConstructor)
+    )
 }
 
 fun getCachedJson(file: VirtualFile, project: Project): JsonObject? {
@@ -99,3 +135,25 @@ fun levenshtein(lhs: CharSequence, rhs: CharSequence): Int {
     }
     return cost[lhsLength - 1]
 }
+
+fun IntRange.toTextRange() = TextRange(first, last + 1)
+
+operator fun TextRange.plus(other: TextRange) = TextRange(startOffset + other.startOffset, endOffset + other.endOffset)
+operator fun TextRange.plus(other: IntRange) = TextRange(startOffset + other.first, endOffset + other.last)
+operator fun TextRange.plus(other: Int) = TextRange(startOffset + other, endOffset + other)
+
+operator fun TextRange.minus(other: TextRange) = TextRange(startOffset - other.startOffset, endOffset - other.endOffset)
+operator fun TextRange.minus(other: IntRange) = TextRange(startOffset - other.first, endOffset - other.last)
+operator fun TextRange.minus(other: Int) = TextRange(startOffset - other, endOffset - other)
+
+operator fun TextRange.times(other: TextRange) = TextRange(startOffset * other.startOffset, endOffset * other.endOffset)
+operator fun TextRange.times(other: IntRange) = TextRange(startOffset * other.first, endOffset * other.last)
+operator fun TextRange.times(other: Int) = TextRange(startOffset * other, endOffset * other)
+
+operator fun TextRange.div(other: TextRange) = TextRange(startOffset / other.startOffset, endOffset / other.endOffset)
+operator fun TextRange.div(other: IntRange) = TextRange(startOffset / other.first, endOffset / other.last)
+operator fun TextRange.div(other: Int) = TextRange(startOffset / other, endOffset / other)
+
+operator fun TextRange.rangeTo(other: TextRange): TextRange = TextRange(minOf(startOffset, other.startOffset), maxOf(endOffset, other.endOffset))
+fun TextRange.addStart(other: Int) = TextRange(startOffset + other, endOffset)
+fun TextRange.addEnd(other: Int) = TextRange(startOffset, endOffset + other)

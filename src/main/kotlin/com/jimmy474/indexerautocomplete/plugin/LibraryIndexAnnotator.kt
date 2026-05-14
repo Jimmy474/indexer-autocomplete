@@ -42,6 +42,10 @@ object LibraryIndexColors {
     val MACRO_CLASS = TextAttributesKey.createTextAttributesKey(
         "LIBRARY_INDEX_CLASS", DefaultLanguageHighlighterColors.KEYWORD
     )
+
+    val MACRO_FLAGS = TextAttributesKey.createTextAttributesKey(
+        "LIBRARY_INDEX_FLAGS", DefaultLanguageHighlighterColors.NUMBER
+    )
 }
 
 class LibraryIndexAnnotator : Annotator {
@@ -73,14 +77,15 @@ class LibraryIndexAnnotator : Annotator {
         val projectDir = project.guessProjectDir() ?: return
         val root = projectDir.findChild("library-index-dependency") ?: return
 
-        val regex = LibraryIndexCompletionProvider.INDEX_REFERENCE_FULL_REGEX
-        val match = regex.find(text) ?: return
+        val regex = LibraryIndex.INDEX_REFERENCE_REGEX
+        val match = regex.matchEntire(text) ?: return
 
         val indexReference = match.toIndexReference()
 
         var current: VirtualFile = root
-        for ((index, part) in indexReference.fqn.withIndex()) {
-            val isLastPart = index == indexReference.fqn.lastIndex
+        val parts = indexReference.fqn.value.split(".")
+        for ((index, part) in parts.withIndex()) {
+            val isLastPart = index == parts.lastIndex
             val next = when {
                 isLastPart && indexReference.memberType != IndexReference.MemberType.NONE -> current.findChild("$part.json")
                 isLastPart -> current.findChild("$part.json") ?: current.findChild(part)
@@ -90,19 +95,19 @@ class LibraryIndexAnnotator : Annotator {
         }
 
         if(!current.isDirectory){
-            indexReference.classNameRange?.let {
+            indexReference.className?.relativeRange?.let {
                 holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
-                    .range(TextRange(startOffset + it.startOffset, startOffset + it.endOffset))
+                    .range(it + startOffset)
                     .textAttributes(LibraryIndexColors.MACRO_CLASS)
                     .create()
             }
         }
 
-        if (indexReference.memberType != IndexReference.MemberType.NONE) {
+        if (indexReference.memberType != IndexReference.MemberType.NONE && !indexReference.flags.isConstructor) {
             val jsonContent = getCachedJson(current, project)
             val key = if (indexReference.memberType == IndexReference.MemberType.METHOD) "methods" else "fields"
             val items = jsonContent?.get(key)?.jsonArray
-            val member = items?.find { it.jsonObject["name"]?.jsonPrimitive?.content == indexReference.memberName }?.jsonObject ?: return
+            val member = items?.find { it.jsonObject["name"]?.jsonPrimitive?.content == indexReference.memberName?.value }?.jsonObject ?: return
             val isStatic = member["declaration"]?.jsonObject?.get("flags")?.jsonObject?.get("isStatic")?.jsonPrimitive?.boolean ?: false
             val typeHighlighter = when (indexReference.memberType) {
                 IndexReference.MemberType.METHOD -> if(isStatic) LibraryIndexColors.MACRO_METHOD_STATIC else LibraryIndexColors.MACRO_METHOD
@@ -110,14 +115,20 @@ class LibraryIndexAnnotator : Annotator {
                 else -> LibraryIndexColors.MACRO_TEXT
             }
 
-            indexReference.memberNameRange?.let {
-                var additionalOffset = if(indexReference.memberType == IndexReference.MemberType.METHOD) 2 else 0
-                if(indexReference.fullDisplayFlag) additionalOffset += 3
+            indexReference.memberName?.relativeRange?.let {
                 holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
-                    .range(TextRange(startOffset + it.startOffset, startOffset + it.endOffset + additionalOffset))
+                    .range(it + startOffset)
                     .textAttributes(typeHighlighter)
                     .create()
             }
         }
+
+        indexReference.flags.relativeRange.takeIf { !it.isEmpty }?.let {
+            holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
+                .range(it + startOffset)
+                .textAttributes(LibraryIndexColors.MACRO_FLAGS)
+                .create()
+        }
+        
     }
 }

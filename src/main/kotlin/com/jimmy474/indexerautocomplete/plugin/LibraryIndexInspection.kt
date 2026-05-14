@@ -37,8 +37,8 @@ class LibraryIndexInspection : LocalInspectionTool() {
                     return
                 }
 
-                val regex = LibraryIndexCompletionProvider.INDEX_REFERENCE_FULL_REGEX
-                val match = regex.find(element.text)
+                val regex = LibraryIndex.INDEX_REFERENCE_REGEX
+                val match = regex.matchEntire(element.text)
 
                 if (match == null) {
                     holder.registerProblem(element, "Malformed library reference syntax", ProblemHighlightType.GENERIC_ERROR)
@@ -47,16 +47,17 @@ class LibraryIndexInspection : LocalInspectionTool() {
 
                 val indexReference = match.toIndexReference()
 
-                if (indexReference.memberType != IndexReference.MemberType.NONE && indexReference.memberName.isNullOrBlank() && !indexReference.isConstructor) {
-                    holder.registerProblem(element, "Reference cannot end with '${LibraryIndexCompletionProvider.MEMBER_PREFIX}', Expected a member name", ProblemHighlightType.GENERIC_ERROR, RemoveTrailingPrefixFix(element))
+                if (indexReference.memberType != IndexReference.MemberType.NONE && indexReference.memberName == null && !indexReference.flags.isConstructor) {
+                    holder.registerProblem(element, "Reference cannot end with '${LibraryIndex.MEMBER_PREFIX}', Expected a member name", ProblemHighlightType.GENERIC_ERROR, RemoveTrailingPrefixFix(element))
                     return
                 }
 
                 var currentPartRelativeStart = 2
                 var current: VirtualFile = root
 
-                for ((index, part) in indexReference.fqn.withIndex()) {
-                    val isLastPart = index == indexReference.fqn.lastIndex
+                val parts = indexReference.fqn.value.split(".")
+                for ((index, part) in parts.withIndex()) {
+                    val isLastPart = index == parts.lastIndex
                     val partRelativeRange = TextRange(currentPartRelativeStart, currentPartRelativeStart + part.length)
 
                     val next = if (isLastPart && indexReference.memberType != IndexReference.MemberType.NONE) {
@@ -84,17 +85,17 @@ class LibraryIndexInspection : LocalInspectionTool() {
                 if (indexReference.memberType != IndexReference.MemberType.NONE && indexReference.memberName != null) {
                     val jsonContent = getCachedJson(current, element.project)
                     val items = jsonContent?.get(if (indexReference.memberType == IndexReference.MemberType.METHOD) "methods" else "fields")?.jsonArray
-                    val member = items?.find { it.jsonObject["name"]?.jsonPrimitive?.content == indexReference.memberName }?.jsonObject
+                    val member = items?.find { it.jsonObject["name"]?.jsonPrimitive?.content == indexReference.memberName.value }?.jsonObject
 
                     if (member == null) {
                         val label = if (indexReference.memberType == IndexReference.MemberType.METHOD) "Method" else "Field"
                         val availableNames = items?.mapNotNull { it.jsonObject["name"]?.jsonPrimitive?.content } ?: emptyList()
 
                         val typoFixes = availableNames
-                            .sortedBy { levenshtein(it, indexReference.memberName) }
+                            .sortedBy { levenshtein(it, indexReference.memberName.value) }
                             .take(3)
 
-                        val fixRelativeRange = indexReference.memberNameRange!!
+                        val fixRelativeRange = indexReference.memberName.relativeRange
 
                         holder.registerProblem(
                             element,
@@ -158,12 +159,12 @@ class ChangeClassOrPackageNameFix(
 
 class RemoveTrailingPrefixFix(element: PsiElement) : LocalQuickFixAndIntentionActionOnPsiElement(element) {
     override fun getFamilyName(): String = "LibraryIndexCorrections"
-    override fun getText(): String = "Remove trailing '${LibraryIndexCompletionProvider.MEMBER_PREFIX}'"
+    override fun getText(): String = "Remove trailing '${LibraryIndex.MEMBER_PREFIX}'"
     override fun invoke(project: Project, file: PsiFile, editor: Editor?, startElement: PsiElement, endElement: PsiElement) {
         val document = file.viewProvider.document ?: return
 
         val elementText = startElement.text
-        val prefix = LibraryIndexCompletionProvider.MEMBER_PREFIX
+        val prefix = LibraryIndex.MEMBER_PREFIX
 
         val lastIndex = elementText.lastIndexOf(prefix)
         if (lastIndex != -1) {
