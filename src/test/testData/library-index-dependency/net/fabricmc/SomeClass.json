@@ -1,8 +1,14 @@
 {
+  "constructors": [
+    { "parameters": [] },
+    { "parameters": [{ "type": "java.lang.String" }] }
+  ],
   "methods": [
-    { "name": "getName" },
-    { "name": "setName" },
-    { "name": "getVersion" }
+    { "name": "getName", "parameters": [] },
+    { "name": "getName", "parameters": [{ "type": "java.lang.String" }] },
+    { "name": "setName", "parameters": [{ "type": "java.lang.String" }] },
+    { "name": "setItems", "parameters": [{ "type": "java.util.List<java.lang.String>" }] },
+    { "name": "getVersion", "parameters": [] }
   ],
   "fields": [
     { "name": "name" },

@@ -30,6 +30,7 @@ class LibraryMarkdownReferenceIndex : ScalarIndexExtension<String>() {
 
                 indexReference.className?.value?.let { map[it] = null }
                 indexReference.memberName?.value?.let { map[it] = null }
+                indexReference.params?.forEach { map[it.value.substringAfterLast('.')] = null }
             }
 
             map

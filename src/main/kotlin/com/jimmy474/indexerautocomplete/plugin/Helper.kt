@@ -6,9 +6,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiManager
 import com.intellij.psi.util.CachedValueProvider
 import com.intellij.psi.util.CachedValuesManager
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.*
 
 data class IndexReference(
     val fullRange: TextRange,
@@ -16,7 +14,9 @@ data class IndexReference(
     val className: GroupInfo?,
     val memberName: GroupInfo?,
     val memberType: MemberType = MemberType.NONE,
-    val flags: Flags = Flags()
+    val params: List<GroupInfo>? = null,
+    val flags: Flags = Flags(),
+    val customName: GroupInfo? = null,
 ){
     enum class MemberType {
         NONE,
@@ -35,6 +35,9 @@ data class Flags(
     val shortName: Boolean = false,
     val fullName: Boolean = false,
     val methodWithParams: Boolean = false,
+    val methodOnlyType: Boolean = false,
+    val methodOnlyName: Boolean = false,
+    val methodBoth: Boolean = false,
     val isConstructor: Boolean = false,
 )
 
@@ -46,6 +49,10 @@ fun MatchResult.toIndexReference(): IndexReference {
     val methodFlagGroup = groups["methodFlag"]
     val methodFlag = methodFlagGroup != null
     val isConstructor = groups["members"] == null && methodFlag
+    val customName = groups["customName"]
+    val methodOnlyType = groups["methodOnlyTypeFlag"] != null
+    val methodOnlyName = groups["methodOnlyNameFlag"] != null
+    val methodBoth = groups["methodBothFlag"] != null
 
     val memberType = when {
         isConstructor -> IndexReference.MemberType.METHOD
@@ -53,19 +60,24 @@ fun MatchResult.toIndexReference(): IndexReference {
         else -> IndexReference.MemberType.NONE
     }
 
-    val memberNameRange =
-        memberName?.let {
-            if (memberType == IndexReference.MemberType.METHOD) {
-                it.range.toTextRange()..methodFlagGroup!!.range.toTextRange()
-            } else {
-                it.range.toTextRange()
-            }
+    val memberNameRange = memberName?.let {
+        if (memberType == IndexReference.MemberType.METHOD) {
+            it.range.toTextRange()..methodFlagGroup!!.range.toTextRange()
+        } else {
+            it.range.toTextRange()
         }
+    }
 
     val memberInfo = if (memberName != null && memberNameRange != null) GroupInfo(memberName.value, memberNameRange) else null
-    val methodWithParamsFlag = groups["methodWithParamsFlag"] != null
     val shortNameFlag = groups["shortNameFlag"] != null
     val fullNameFlag = groups["fullNameFlag"] != null
+
+    val paramsGroup = groups["params"]
+    val params = when {
+        methodFlagGroup == null -> null
+        paramsGroup == null -> emptyList()
+        else -> splitTopLevelTypes(paramsGroup.value, paramsGroup.range.first)
+    }
 
     return IndexReference(
         fullRange = fullRange,
@@ -77,13 +89,18 @@ fun MatchResult.toIndexReference(): IndexReference {
         },
         memberName = memberInfo,
         memberType = memberType,
+        params = params,
         flags = Flags(
             relativeRange = groups["flags"]?.takeIf { it.value.isNotBlank() }?.range?.toTextRange() ?: TextRange.EMPTY_RANGE,
-            methodWithParams = methodWithParamsFlag,
+            methodWithParams = (params?.isNotEmpty() ?: false) && (methodOnlyName || methodOnlyType || methodBoth),
+            methodOnlyType = methodOnlyType,
+            methodOnlyName = methodOnlyName,
+            methodBoth = methodBoth,
             isConstructor = isConstructor,
             shortName = shortNameFlag,
             fullName = fullNameFlag
-        )
+        ),
+        customName = customName?.let { GroupInfo(it.value, it.range.toTextRange()) }
     )
 }
 
@@ -134,6 +151,64 @@ fun levenshtein(lhs: CharSequence, rhs: CharSequence): Int {
         newCost = swap
     }
     return cost[lhsLength - 1]
+}
+
+fun splitTopLevelTypes(text: String, relativeStart: Int = 0): List<GroupInfo> {
+    val result = mutableListOf<GroupInfo>()
+    var depth = 0
+    var tokenStart = 0
+
+    fun addToken(endExclusive: Int) {
+        val raw = text.substring(tokenStart, endExclusive)
+        val leadingWhitespace = raw.indexOfFirst { !it.isWhitespace() }
+        if (leadingWhitespace == -1) return
+        val trailingWhitespace = raw.indexOfLast { !it.isWhitespace() }
+        val start = tokenStart + leadingWhitespace
+        val end = tokenStart + trailingWhitespace + 1
+        result.add(GroupInfo(text.substring(start, end), TextRange(relativeStart + start, relativeStart + end)))
+    }
+
+    text.forEachIndexed { index, char ->
+        when (char) {
+            '<' -> depth++
+            '>' -> if (depth > 0) depth--
+            ',' -> if (depth == 0) {
+                addToken(index)
+                tokenStart = index + 1
+            }
+        }
+    }
+    addToken(text.length)
+    return result
+}
+
+fun parameterTypes(overload: JsonElement): List<String> {
+    return overload.jsonObject["parameters"]?.jsonArray?.mapNotNull {
+        it.jsonObject["type"]?.jsonPrimitive?.content
+    } ?: emptyList()
+}
+
+fun simpleTypeName(type: String): String {
+    val builder = StringBuilder()
+    val token = StringBuilder()
+
+    fun flushToken() {
+        if (token.isNotEmpty()) {
+            builder.append(token.toString().substringAfterLast('.'))
+            token.clear()
+        }
+    }
+
+    for (char in type) {
+        if (char.isLetterOrDigit() || char == '_' || char == '$' || char == '.') {
+            token.append(char)
+        } else {
+            flushToken()
+            builder.append(char)
+        }
+    }
+    flushToken()
+    return builder.toString()
 }
 
 fun IntRange.toTextRange() = TextRange(first, last + 1)

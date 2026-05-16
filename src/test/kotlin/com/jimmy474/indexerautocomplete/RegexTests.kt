@@ -10,24 +10,22 @@ class RegexTests: BasePlatformTestCase() {
     fun `test full regex`(){
         assertNotNull(regex.matchEntire("@`package.Class`"))
         assertNotNull(regex.matchEntire("@`package.Class()`"))
-        assertNotNull(regex.matchEntire("@`package.Class(...)`"))
         assertNotNull(regex.matchEntire("@`package.Class#field`"))
         assertNotNull(regex.matchEntire("@`package.Class#method()`"))
-        assertNotNull(regex.matchEntire("@`package.Class#method(...)`"))
+        assertNotNull(regex.matchEntire("@`package.Class#method(java.lang.String, int)`"))
+        assertNotNull(regex.matchEntire("@`package.Class#method(java.util.List<java.lang.String>)`"))
 
-        assertNotNull(regex.matchEntire("@`package.Class>`"))
-        assertNotNull(regex.matchEntire("@`package.Class()>`"))
-        assertNotNull(regex.matchEntire("@`package.Class(...)>`"))
-        assertNotNull(regex.matchEntire("@`package.Class#field>`"))
-        assertNotNull(regex.matchEntire("@`package.Class#method()>`"))
-        assertNotNull(regex.matchEntire("@`package.Class#method(...)>`"))
+        assertNotNull(regex.matchEntire("@`package.Class+`"))
+        assertNotNull(regex.matchEntire("@`package.Class()+`"))
+        assertNotNull(regex.matchEntire("@`package.Class#field+`"))
+        assertNotNull(regex.matchEntire("@`package.Class#method()+`"))
+        assertNotNull(regex.matchEntire("@`package.Class#method(java.lang.String, int)+`"))
 
-        assertNotNull(regex.matchEntire("@`package.Class<`"))
-        assertNotNull(regex.matchEntire("@`package.Class()<`"))
-        assertNotNull(regex.matchEntire("@`package.Class(...)<`"))
-        assertNotNull(regex.matchEntire("@`package.Class#field<`"))
-        assertNotNull(regex.matchEntire("@`package.Class#method()<`"))
-        assertNotNull(regex.matchEntire("@`package.Class#method(...)<`"))
+        assertNotNull(regex.matchEntire("@`package.Class-`"))
+        assertNotNull(regex.matchEntire("@`package.Class()-`"))
+        assertNotNull(regex.matchEntire("@`package.Class#field-`"))
+        assertNotNull(regex.matchEntire("@`package.Class#method()-`"))
+        assertNotNull(regex.matchEntire("@`package.Class#method(java.lang.String, int)-`"))
     }
 
     fun `test malformed path syntax does not match`() {
@@ -36,6 +34,10 @@ class RegexTests: BasePlatformTestCase() {
 
     fun `test malformed member syntax does not match`() {
         assertNull(regex.matchEntire("@`net.fabricmc.SomeClass#missing(`"))
+    }
+
+    fun `test dots placeholder syntax does not match`() {
+        assertNull(regex.matchEntire("@`package.Class#method(...)`"))
     }
 
     fun testClassReference() {
@@ -86,41 +88,12 @@ class RegexTests: BasePlatformTestCase() {
                 ),
                 memberName = null,
                 memberType = IndexReference.MemberType.METHOD,
+                params = emptyList(),
                 flags = Flags(
                     relativeRange = TextRange.EMPTY_RANGE,
                     shortName = false,
                     fullName = false,
                     methodWithParams = false,
-                    isConstructor = true
-                )
-            ),
-            result
-        )
-    }
-
-    fun testConstructorWithParamsReference() {
-        val input = "@`package.Class(...)`"
-
-        val result = regex.matchEntire(input)?.toIndexReference()
-
-        assertEquals(
-            IndexReference(
-                fullRange = TextRange(0, 21),
-                fqn = GroupInfo(
-                    value = "package.Class",
-                    relativeRange = TextRange(2, 15)
-                ),
-                className = GroupInfo(
-                    value = "Class",
-                    relativeRange = TextRange(10, 20)
-                ),
-                memberName = null,
-                memberType = IndexReference.MemberType.METHOD,
-                flags = Flags(
-                    relativeRange = TextRange.EMPTY_RANGE,
-                    shortName = false,
-                    fullName = false,
-                    methodWithParams = true,
                     isConstructor = true
                 )
             ),
@@ -182,6 +155,7 @@ class RegexTests: BasePlatformTestCase() {
                     relativeRange = TextRange(16, 24)
                 ),
                 memberType = IndexReference.MemberType.METHOD,
+                params = emptyList(),
                 flags = Flags(
                     relativeRange = TextRange.EMPTY_RANGE,
                     shortName = false,
@@ -194,14 +168,14 @@ class RegexTests: BasePlatformTestCase() {
         )
     }
 
-    fun testMethodWithParamsReference() {
-        val input = "@`package.Class#method(...)`"
+    fun testMethodOverloadReference() {
+        val input = "@`package.Class#method(java.lang.String, int)`"
 
         val result = regex.matchEntire(input)?.toIndexReference()
 
         assertEquals(
             IndexReference(
-                fullRange = TextRange(0, 28),
+                fullRange = TextRange(0, 46),
                 fqn = GroupInfo(
                     value = "package.Class",
                     relativeRange = TextRange(2, 15)
@@ -212,9 +186,49 @@ class RegexTests: BasePlatformTestCase() {
                 ),
                 memberName = GroupInfo(
                     value = "method",
-                    relativeRange = TextRange(16, 27)
+                    relativeRange = TextRange(16, 45)
                 ),
                 memberType = IndexReference.MemberType.METHOD,
+                params = listOf(
+                    GroupInfo("java.lang.String", TextRange(23, 39)),
+                    GroupInfo("int", TextRange(41, 44))
+                ),
+                flags = Flags(
+                    relativeRange = TextRange.EMPTY_RANGE,
+                    shortName = false,
+                    fullName = false,
+                    methodWithParams = true,
+                    isConstructor = false
+                )
+            ),
+            result
+        )
+    }
+
+    fun testMethodGenericOverloadReference() {
+        val input = "@`package.Class#method(java.util.List<java.lang.String>)`"
+
+        val result = regex.matchEntire(input)?.toIndexReference()
+
+        assertEquals(
+            IndexReference(
+                fullRange = TextRange(0, 57),
+                fqn = GroupInfo(
+                    value = "package.Class",
+                    relativeRange = TextRange(2, 15)
+                ),
+                className = GroupInfo(
+                    value = "Class",
+                    relativeRange = TextRange(10, 15)
+                ),
+                memberName = GroupInfo(
+                    value = "method",
+                    relativeRange = TextRange(16, 56)
+                ),
+                memberType = IndexReference.MemberType.METHOD,
+                params = listOf(
+                    GroupInfo("java.util.List<java.lang.String>", TextRange(23, 55))
+                ),
                 flags = Flags(
                     relativeRange = TextRange.EMPTY_RANGE,
                     shortName = false,
@@ -228,7 +242,7 @@ class RegexTests: BasePlatformTestCase() {
     }
 
     fun testShortClassReference() {
-        val input = "@`package.Class<`"
+        val input = "@`package.Class-`"
 
         val result = regex.matchEntire(input)?.toIndexReference()
 
@@ -258,7 +272,7 @@ class RegexTests: BasePlatformTestCase() {
     }
 
     fun testShortConstructorReference() {
-        val input = "@`package.Class()<`"
+        val input = "@`package.Class()-`"
 
         val result = regex.matchEntire(input)?.toIndexReference()
 
@@ -275,6 +289,7 @@ class RegexTests: BasePlatformTestCase() {
                 ),
                 memberName = null,
                 memberType = IndexReference.MemberType.METHOD,
+                params = emptyList(),
                 flags = Flags(
                     relativeRange = TextRange(17, 18),
                     shortName = true,
@@ -287,38 +302,8 @@ class RegexTests: BasePlatformTestCase() {
         )
     }
 
-    fun testShortConstructorWithParamsReference() {
-        val input = "@`package.Class(...)<`"
-
-        val result = regex.matchEntire(input)?.toIndexReference()
-
-        assertEquals(
-            IndexReference(
-                fullRange = TextRange(0, 22),
-                fqn = GroupInfo(
-                    value = "package.Class",
-                    relativeRange = TextRange(2, 15)
-                ),
-                className = GroupInfo(
-                    value = "Class",
-                    relativeRange = TextRange(10, 20)
-                ),
-                memberName = null,
-                memberType = IndexReference.MemberType.METHOD,
-                flags = Flags(
-                    relativeRange = TextRange(20, 21),
-                    shortName = true,
-                    fullName = false,
-                    methodWithParams = true,
-                    isConstructor = true
-                )
-            ),
-            result
-        )
-    }
-
     fun testShortFieldReference() {
-        val input = "@`package.Class#field<`"
+        val input = "@`package.Class#field-`"
 
         val result = regex.matchEntire(input)?.toIndexReference()
 
@@ -351,7 +336,7 @@ class RegexTests: BasePlatformTestCase() {
     }
 
     fun testShortMethodReference() {
-        val input = "@`package.Class#method()<`"
+        val input = "@`package.Class#method()-`"
 
         val result = regex.matchEntire(input)?.toIndexReference()
 
@@ -371,6 +356,7 @@ class RegexTests: BasePlatformTestCase() {
                     relativeRange = TextRange(16, 24)
                 ),
                 memberType = IndexReference.MemberType.METHOD,
+                params = emptyList(),
                 flags = Flags(
                     relativeRange = TextRange(24, 25),
                     shortName = true,
@@ -383,41 +369,8 @@ class RegexTests: BasePlatformTestCase() {
         )
     }
 
-    fun testShortMethodWithParamsReference() {
-        val input = "@`package.Class#method(...)<`"
-
-        val result = regex.matchEntire(input)?.toIndexReference()
-
-        assertEquals(
-            IndexReference(
-                fullRange = TextRange(0, 29),
-                fqn = GroupInfo(
-                    value = "package.Class",
-                    relativeRange = TextRange(2, 15)
-                ),
-                className = GroupInfo(
-                    value = "Class",
-                    relativeRange = TextRange(10, 15)
-                ),
-                memberName = GroupInfo(
-                    value = "method",
-                    relativeRange = TextRange(16, 27)
-                ),
-                memberType = IndexReference.MemberType.METHOD,
-                flags = Flags(
-                    relativeRange = TextRange(27, 28),
-                    shortName = true,
-                    fullName = false,
-                    methodWithParams = true,
-                    isConstructor = false
-                )
-            ),
-            result
-        )
-    }
-
     fun testFullClassReference() {
-        val input = "@`package.Class>`"
+        val input = "@`package.Class+`"
 
         val result = regex.matchEntire(input)?.toIndexReference()
 
@@ -447,7 +400,7 @@ class RegexTests: BasePlatformTestCase() {
     }
 
     fun testFullConstructorReference() {
-        val input = "@`package.Class()>`"
+        val input = "@`package.Class()+`"
 
         val result = regex.matchEntire(input)?.toIndexReference()
 
@@ -464,6 +417,7 @@ class RegexTests: BasePlatformTestCase() {
                 ),
                 memberName = null,
                 memberType = IndexReference.MemberType.METHOD,
+                params = emptyList(),
                 flags = Flags(
                     relativeRange = TextRange(17, 18),
                     shortName = false,
@@ -476,38 +430,8 @@ class RegexTests: BasePlatformTestCase() {
         )
     }
 
-    fun testFullConstructorWithParamsReference() {
-        val input = "@`package.Class(...)>`"
-
-        val result = regex.matchEntire(input)?.toIndexReference()
-
-        assertEquals(
-            IndexReference(
-                fullRange = TextRange(0, 22),
-                fqn = GroupInfo(
-                    value = "package.Class",
-                    relativeRange = TextRange(2, 15)
-                ),
-                className = GroupInfo(
-                    value = "Class",
-                    relativeRange = TextRange(10, 20)
-                ),
-                memberName = null,
-                memberType = IndexReference.MemberType.METHOD,
-                flags = Flags(
-                    relativeRange = TextRange(20, 21),
-                    shortName = false,
-                    fullName = true,
-                    methodWithParams = true,
-                    isConstructor = true
-                )
-            ),
-            result
-        )
-    }
-
     fun testFullFieldReference() {
-        val input = "@`package.Class#field>`"
+        val input = "@`package.Class#field+`"
 
         val result = regex.matchEntire(input)?.toIndexReference()
 
@@ -540,7 +464,7 @@ class RegexTests: BasePlatformTestCase() {
     }
 
     fun testFullMethodReference() {
-        val input = "@`package.Class#method()>`"
+        val input = "@`package.Class#method()+`"
 
         val result = regex.matchEntire(input)?.toIndexReference()
 
@@ -560,44 +484,12 @@ class RegexTests: BasePlatformTestCase() {
                     relativeRange = TextRange(16, 24)
                 ),
                 memberType = IndexReference.MemberType.METHOD,
+                params = emptyList(),
                 flags = Flags(
                     relativeRange = TextRange(24, 25),
                     shortName = false,
                     fullName = true,
                     methodWithParams = false,
-                    isConstructor = false
-                )
-            ),
-            result
-        )
-    }
-
-    fun testFullMethodWithParamsReference() {
-        val input = "@`package.Class#method(...)>`"
-
-        val result = regex.matchEntire(input)?.toIndexReference()
-
-        assertEquals(
-            IndexReference(
-                fullRange = TextRange(0, 29),
-                fqn = GroupInfo(
-                    value = "package.Class",
-                    relativeRange = TextRange(2, 15)
-                ),
-                className = GroupInfo(
-                    value = "Class",
-                    relativeRange = TextRange(10, 15)
-                ),
-                memberName = GroupInfo(
-                    value = "method",
-                    relativeRange = TextRange(16, 27)
-                ),
-                memberType = IndexReference.MemberType.METHOD,
-                flags = Flags(
-                    relativeRange = TextRange(27, 28),
-                    shortName = false,
-                    fullName = true,
-                    methodWithParams = true,
                     isConstructor = false
                 )
             ),

@@ -25,10 +25,10 @@ class LibraryReferenceProvider: PsiReferenceProvider(){
 
         val refs: MutableList<PsiReference> = mutableListOf()
         if(indexReference.memberType != IndexReference.MemberType.NONE && indexReference.memberName != null){
-            refs.add(LibrarySourceReference(element, indexReference.memberName.relativeRange, fqn, indexReference.memberType, indexReference.memberName.value))
+            refs.add(LibrarySourceReference(element, indexReference.memberName.relativeRange, fqn, indexReference.memberType, indexReference.memberName.value, indexReference.params?.map { it.value }))
         }
         if(indexReference.flags.isConstructor){
-            refs.add(LibrarySourceReference(element, indexReference.className!!.relativeRange, fqn, IndexReference.MemberType.METHOD, "<init>"))
+            refs.add(LibrarySourceReference(element, indexReference.className!!.relativeRange, fqn, IndexReference.MemberType.METHOD, "<init>", indexReference.params?.map { it.value }))
         }else{
             indexReference.className?.let { refs.add(LibrarySourceReference(element, it.relativeRange, fqn, IndexReference.MemberType.NONE, null)) }
         }
@@ -38,7 +38,14 @@ class LibraryReferenceProvider: PsiReferenceProvider(){
 }
 
 
-class LibrarySourceReference(element: PsiElement, range: TextRange, val fqn: String, val memberType: IndexReference.MemberType, val memberName: String?) : PsiReferenceBase<PsiElement>(element, range) {
+class LibrarySourceReference(
+    element: PsiElement,
+    range: TextRange,
+    val fqn: String,
+    val memberType: IndexReference.MemberType,
+    val memberName: String?,
+    private val parameterTypes: List<String>? = null,
+) : PsiReferenceBase<PsiElement>(element, range) {
     val isConstructor = memberName == "<init>"
 
     override fun resolve(): PsiElement? {
@@ -47,10 +54,10 @@ class LibrarySourceReference(element: PsiElement, range: TextRange, val fqn: Str
         val facade = JavaPsiFacade.getInstance(project)
         val psiClass = facade.findClass(fqn, scope) ?: return null
 
-        if(isConstructor) return psiClass.constructors.firstOrNull()
+        if(isConstructor) return psiClass.constructors.firstOrNull { parametersMatch(it, parameterTypes) }
         if(memberName == null) return psiClass
         return when (memberType) {
-            IndexReference.MemberType.METHOD -> psiClass.findMethodsByName(memberName, true).firstOrNull()
+            IndexReference.MemberType.METHOD -> psiClass.findMethodsByName(memberName, true).firstOrNull { parametersMatch(it, parameterTypes) }
             IndexReference.MemberType.FIELD -> psiClass.findFieldByName(memberName, true)
             IndexReference.MemberType.NONE -> null
         }
@@ -62,8 +69,8 @@ class LibrarySourceReference(element: PsiElement, range: TextRange, val fqn: Str
         }
 
         if (element is PsiMethod) {
-            if(isConstructor) return element.containingClass?.qualifiedName == fqn
-            return memberType == IndexReference.MemberType.METHOD && element.name == memberName && element.containingClass?.qualifiedName == fqn
+            if(isConstructor) return element.isConstructor && element.containingClass?.qualifiedName == fqn && parametersMatch(element, parameterTypes)
+            return memberType == IndexReference.MemberType.METHOD && element.name == memberName && element.containingClass?.qualifiedName == fqn && parametersMatch(element, parameterTypes)
         }
 
         if (element is PsiField) {
@@ -72,5 +79,13 @@ class LibrarySourceReference(element: PsiElement, range: TextRange, val fqn: Str
 
         return false
     }
-}
 
+    private fun parametersMatch(method: PsiMethod, expectedTypes: List<String>?): Boolean {
+        if (expectedTypes == null) return true
+        val actualTypes = method.parameterList.parameters.map { it.type }
+        if (actualTypes.size != expectedTypes.size) return false
+        return actualTypes.zip(expectedTypes).all { (actual, expected) ->
+            actual.canonicalText == expected || actual.presentableText == expected || actual.canonicalText.endsWith(expected)
+        }
+    }
+}

@@ -5,6 +5,7 @@ import com.intellij.openapi.project.guessProjectDir
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.testFramework.TestDataPath
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.jimmy474.indexerautocomplete.plugin.LibraryIndexInspection
 
 @TestDataPath("\$CONTENT_ROOT/src/test/testData")
 class MyPluginTest : BasePlatformTestCase() {
@@ -12,6 +13,7 @@ class MyPluginTest : BasePlatformTestCase() {
     override fun setUp() {
         super.setUp()
         myFixture.copyDirectoryToProject("library-index-dependency", "library-index-dependency")
+        myFixture.enableInspections(LibraryIndexInspection())
         VfsUtil.markDirtyAndRefresh(false, true, true, myFixture.project.guessProjectDir())
     }
 
@@ -67,7 +69,7 @@ class MyPluginTest : BasePlatformTestCase() {
         myFixture.completeBasic()
 
         val suggestions = myFixture.lookupElementStrings ?: emptyList()
-        assertSameElements(suggestions, "#")
+        assertSameElements(suggestions, "#", "()")
     }
 
     fun `test Method Completion`() {
@@ -75,7 +77,7 @@ class MyPluginTest : BasePlatformTestCase() {
         myFixture.completeBasic()
 
         val suggestions = myFixture.lookupElementStrings ?: emptyList()
-        assertContainsElements(suggestions, "getName", "setName")
+        assertContainsElements(suggestions, "getName(java.lang.String)", "setName()", "setName(java.lang.String)", "getVersion()")
     }
 
     fun `test Method Completion With Prefix`() {
@@ -83,7 +85,7 @@ class MyPluginTest : BasePlatformTestCase() {
         myFixture.completeBasic()
 
         val suggestions = myFixture.lookupElementStrings ?: emptyList()
-        assertSameElements(suggestions, "getName", "getVersion")
+        assertContainsElements(suggestions, "getName(java.lang.String)", "getVersion()")
     }
 
     fun `test Field Completion`() {
@@ -245,10 +247,34 @@ class MyPluginTest : BasePlatformTestCase() {
     }
 
     fun `test Method Selection Does Not Add Dot`() {
-        myFixture.configureByText("method_select.md", "@`net.fabricmc.SomeClass#get<caret>`")
+        myFixture.configureByText("method_select.md", "@`net.fabricmc.SomeClass#getVer<caret>`")
+        myFixture.completeBasic()
+        myFixture.checkResult("@`net.fabricmc.SomeClass#getVersion()`")
+    }
+
+    fun `test Method Parameter Completion`() {
+        myFixture.configureByText("method_param.md", "@`net.fabricmc.SomeClass#getName(<caret>)`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings ?: emptyList()
+        assertContainsElements(suggestions, "java.lang.String")
+        assertDoesntContain(suggestions, "...")
+    }
+
+    fun `test Method Parameter Selection Keeps Closing Paren`() {
+        myFixture.configureByText("method_param_select.md", "@`net.fabricmc.SomeClass#getName(<caret>)`")
         myFixture.completeBasic()
         myFixture.finishLookup('\n')
-        myFixture.checkResult("@`net.fabricmc.SomeClass#getName`")
+        myFixture.checkResult("@`net.fabricmc.SomeClass#getName(java.lang.String)`")
+    }
+
+    fun `test Constructor Parameter Completion`() {
+        myFixture.configureByText("constructor_param.md", "@`net.fabricmc.SomeClass(<caret>)`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings ?: emptyList()
+        assertContainsElements(suggestions, "java.lang.String")
+        assertDoesntContain(suggestions, "...")
     }
 
     fun `test Completion In Middle Of Text`() {
@@ -301,9 +327,29 @@ class MyPluginTest : BasePlatformTestCase() {
         myFixture.configureByText("test.md", "@`net.fabricmc.SomeClass#missing()<caret>`")
 
         val highlights = myFixture.doHighlighting()
-        val error = highlights.find { it.description == "Method 'missing' not found in SomeClass Class" }
+        val error = highlights.find { it.description == "Method 'missing' not found" }
 
         assertNotNull("Should find an error squiggle for a missing method", error)
+        assertEquals(HighlightSeverity.ERROR, error?.severity)
+    }
+
+    fun `test Ambiguous Method Overload Shows Error`() {
+        myFixture.configureByText("test.md", "@`net.fabricmc.SomeClass#getName()<caret>`")
+
+        val highlights = myFixture.doHighlighting()
+        val error = highlights.find { it.description == "Ambiguous reference for Method overload, to reference Method with multiple overloads you must provide the types of parameters in parenthesis" }
+
+        assertNotNull("Should find an error squiggle for an ambiguous method overload", error)
+        assertEquals(HighlightSeverity.ERROR, error?.severity)
+    }
+
+    fun `test Missing Method Overload Shows Error`() {
+        myFixture.configureByText("test.md", "@`net.fabricmc.SomeClass#getName(int)<caret>`")
+
+        val highlights = myFixture.doHighlighting()
+        val error = highlights.find { it.description == "Method overload with given types not found" }
+
+        assertNotNull("Should find an error squiggle for a missing method overload", error)
         assertEquals(HighlightSeverity.ERROR, error?.severity)
     }
 
@@ -311,7 +357,7 @@ class MyPluginTest : BasePlatformTestCase() {
         myFixture.configureByText("test.md", "@`net.fabricmc.SomeClass#missing<caret>`")
 
         val highlights = myFixture.doHighlighting()
-        val error = highlights.find { it.description == "Field 'missing' not found in SomeClass Class" }
+        val error = highlights.find { it.description == "Field 'missing' not found" }
 
         assertNotNull("Should find an error squiggle for a missing field", error)
         assertEquals(HighlightSeverity.ERROR, error?.severity)

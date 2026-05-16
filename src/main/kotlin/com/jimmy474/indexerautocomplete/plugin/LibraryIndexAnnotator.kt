@@ -43,8 +43,16 @@ object LibraryIndexColors {
         "LIBRARY_INDEX_CLASS", DefaultLanguageHighlighterColors.KEYWORD
     )
 
+    val MACRO_PARAMETER = TextAttributesKey.createTextAttributesKey(
+        "LIBRARY_INDEX_PARAMETER", DefaultLanguageHighlighterColors.PARAMETER
+    )
+
     val MACRO_FLAGS = TextAttributesKey.createTextAttributesKey(
-        "LIBRARY_INDEX_FLAGS", DefaultLanguageHighlighterColors.NUMBER
+        "LIBRARY_INDEX_FLAGS", DefaultLanguageHighlighterColors.VALID_STRING_ESCAPE
+    )
+
+    val MACRO_CUSTOM_NAME = TextAttributesKey.createTextAttributesKey(
+        "LIBRARY_INDEX_CUSTOM_NAME", DefaultLanguageHighlighterColors.CONSTANT
     )
 }
 
@@ -112,7 +120,6 @@ class LibraryIndexAnnotator : Annotator {
             val typeHighlighter = when (indexReference.memberType) {
                 IndexReference.MemberType.METHOD -> if(isStatic) LibraryIndexColors.MACRO_METHOD_STATIC else LibraryIndexColors.MACRO_METHOD
                 IndexReference.MemberType.FIELD -> if(isStatic) LibraryIndexColors.MACRO_FIELD_STATIC else LibraryIndexColors.MACRO_FIELD
-                else -> LibraryIndexColors.MACRO_TEXT
             }
 
             indexReference.memberName?.relativeRange?.let {
@@ -123,10 +130,24 @@ class LibraryIndexAnnotator : Annotator {
             }
         }
 
+        indexReference.params?.forEach {
+            holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
+                .range(it.relativeRange + startOffset)
+                .textAttributes(LibraryIndexColors.MACRO_PARAMETER)
+                .create()
+        }
+
         indexReference.flags.relativeRange.takeIf { !it.isEmpty }?.let {
             holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
                 .range(it + startOffset)
                 .textAttributes(LibraryIndexColors.MACRO_FLAGS)
+                .create()
+        }
+
+        indexReference.customName?.relativeRange?.takeIf { !it.isEmpty }?.let {
+            holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
+                .range(it + startOffset)
+                .textAttributes(LibraryIndexColors.MACRO_CUSTOM_NAME)
                 .create()
         }
         

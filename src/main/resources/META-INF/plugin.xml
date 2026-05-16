@@ -38,4 +38,9 @@
                 groupKey="inspection.library.index.group.key"
         />
     </extensions>
+    <actions>
+        <action id="com.jimmy474.indexerautocomplete.services.GenerateIndexAction" class="com.jimmy474.indexerautocomplete.services.GenerateIndexAction">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+    </actions>
 </idea-plugin>

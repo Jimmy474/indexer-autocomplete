@@ -14,6 +14,7 @@ import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiElementVisitor
 import com.intellij.psi.PsiFile
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -47,8 +48,13 @@ class LibraryIndexInspection : LocalInspectionTool() {
 
                 val indexReference = match.toIndexReference()
 
+                indexReference.customName?.let {
+                    holder.registerProblem(element, "It is not recommended to use custom names, Unless it is an emergency", ProblemHighlightType.WARNING)
+                    return
+                }
+
                 if (indexReference.memberType != IndexReference.MemberType.NONE && indexReference.memberName == null && !indexReference.flags.isConstructor) {
-                    holder.registerProblem(element, "Reference cannot end with '${LibraryIndex.MEMBER_PREFIX}', Expected a member name", ProblemHighlightType.GENERIC_ERROR, RemoveTrailingPrefixFix(element))
+                    holder.registerProblem(element, "Reference cannot end with '${LibraryIndex.MEMBER_PREFIX}', Expected a member name", ProblemHighlightType.GENERIC_ERROR, RemoveTrailingPrefixFix(element, LibraryIndex.MEMBER_PREFIX))
                     return
                 }
 
@@ -82,32 +88,74 @@ class LibraryIndexInspection : LocalInspectionTool() {
                     currentPartRelativeStart += part.length + 1
                 }
 
-                if (indexReference.memberType != IndexReference.MemberType.NONE && indexReference.memberName != null) {
-                    val jsonContent = getCachedJson(current, element.project)
-                    val items = jsonContent?.get(if (indexReference.memberType == IndexReference.MemberType.METHOD) "methods" else "fields")?.jsonArray
-                    val member = items?.find { it.jsonObject["name"]?.jsonPrimitive?.content == indexReference.memberName.value }?.jsonObject
-
-                    if (member == null) {
-                        val label = if (indexReference.memberType == IndexReference.MemberType.METHOD) "Method" else "Field"
-                        val availableNames = items?.mapNotNull { it.jsonObject["name"]?.jsonPrimitive?.content } ?: emptyList()
-
-                        val typoFixes = availableNames
-                            .sortedBy { levenshtein(it, indexReference.memberName.value) }
-                            .take(3)
-
-                        val fixRelativeRange = indexReference.memberName.relativeRange
-
-                        holder.registerProblem(
-                            element,
-                            "$label not found",
-                            ProblemHighlightType.GENERIC_ERROR,
-                            *typoFixes.map { ChangeMemberNameFix(element, fixRelativeRange, it) }.toTypedArray()
-                        )
+                if (indexReference.memberType == IndexReference.MemberType.FIELD && indexReference.memberName != null) {
+                    val jsonContent = getCachedJson(current, element.project)!!
+                    val fields = jsonContent["fields"]!!.jsonArray
+                    val field = fields.find{ it.jsonObject["name"]!!.jsonPrimitive.content == indexReference.memberName.value }?.jsonObject
+                    if (field == null) {
+                        incorrectMemberNameProblem("Field", fields, indexReference.memberName, element, holder)
                         return
+                    }
+                    if(indexReference.flags.methodBoth || indexReference.flags.methodOnlyName || indexReference.flags.methodOnlyType){
+                        val suffix = when{
+                            indexReference.flags.methodBoth -> LibraryIndex.METHOD_BOTH_SYMBOL.removePrefix("\\")
+                            indexReference.flags.methodOnlyName -> LibraryIndex.METHOD_ONLY_NAME_SYMBOL.removePrefix("\\")
+                            indexReference.flags.methodOnlyType -> LibraryIndex.METHOD_ONLY_TYPE_SYMBOL.removePrefix("\\")
+                            else -> ""
+                        }
+                        holder.registerProblem(element, "Method only flags are not allowed for field references", ProblemHighlightType.GENERIC_ERROR, RemoveTrailingPrefixFix(element,suffix))
+                    }
+                }
+
+                if (indexReference.memberType == IndexReference.MemberType.METHOD) {
+                    val isConstructor = indexReference.flags.isConstructor
+                    val paramFQNs = indexReference.params
+                    val jsonContent = getCachedJson(current, element.project) ?: return
+                    val methodName = if(isConstructor) indexReference.className!!.value else indexReference.memberName!!.value
+                    val overloadsArray = jsonContent[if(isConstructor) "constructors" else "methods"]?.jsonArray ?: return
+                    val label = if(isConstructor) "Constructor" else "Method"
+
+                    if(!isConstructor && overloadsArray.none{ it.jsonObject["name"]!!.jsonPrimitive.content == methodName }){
+                        incorrectMemberNameProblem("Method", overloadsArray, indexReference.memberName!!, element, holder)
+                        return
+                    }
+
+                    val overloads = if (isConstructor) {
+                        overloadsArray.toList()
+                    } else {
+                        overloadsArray.filter{ it.jsonObject["name"]!!.jsonPrimitive.content == methodName }
+                    }
+
+                    if (paramFQNs == null) {
+                        return
+                    }
+
+                    if (paramFQNs.isEmpty() && overloads.size == 1) return
+
+                    if (paramFQNs.isEmpty() && overloads.size > 1) {
+                        holder.registerProblem(element, "Ambiguous reference for $label overload, to reference $label with multiple overloads you must provide the types of parameters in parenthesis", ProblemHighlightType.GENERIC_ERROR)
+                        return
+                    }
+
+                    val overload = overloads.find { overload ->
+                        val types = overload.jsonObject["parameters"]?.jsonArray?.map { it.jsonObject["type"]!!.jsonPrimitive.content } ?: emptyList()
+                        types == paramFQNs.map { it.value }
+                    }?.jsonObject
+
+                    if(overload == null) {
+                        holder.registerProblem(element, "$label overload with given types not found", ProblemHighlightType.GENERIC_ERROR)
                     }
                 }
             }
         }
+    }
+
+    fun incorrectMemberNameProblem(label: String,items: JsonArray?, memberInfo: GroupInfo, element: PsiElement, holder: ProblemsHolder){
+        val availableNames = items?.mapNotNull { it.jsonObject["name"]?.jsonPrimitive?.content } ?: emptyList()
+        val typoFixes = availableNames.sortedBy { levenshtein(it, memberInfo.value) }.take(3)
+        val fixRelativeRange = memberInfo.relativeRange
+
+        holder.registerProblem(element, "$label '${memberInfo.value}' not found", ProblemHighlightType.GENERIC_ERROR, *typoFixes.map { ChangeMemberNameFix(element, fixRelativeRange, it) }.toTypedArray())
     }
 }
 
@@ -157,16 +205,15 @@ class ChangeClassOrPackageNameFix(
     }
 }
 
-class RemoveTrailingPrefixFix(element: PsiElement) : LocalQuickFixAndIntentionActionOnPsiElement(element) {
+class RemoveTrailingPrefixFix(element: PsiElement, val suffix: String) : LocalQuickFixAndIntentionActionOnPsiElement(element) {
     override fun getFamilyName(): String = "LibraryIndexCorrections"
-    override fun getText(): String = "Remove trailing '${LibraryIndex.MEMBER_PREFIX}'"
+    override fun getText(): String = "Remove trailing '$suffix'"
     override fun invoke(project: Project, file: PsiFile, editor: Editor?, startElement: PsiElement, endElement: PsiElement) {
         val document = file.viewProvider.document ?: return
 
         val elementText = startElement.text
-        val prefix = LibraryIndex.MEMBER_PREFIX
 
-        val lastIndex = elementText.lastIndexOf(prefix)
+        val lastIndex = elementText.lastIndexOf(suffix)
         if (lastIndex != -1) {
             val absoluteStart = startElement.textRange.startOffset + lastIndex
             val absoluteEnd = startElement.textRange.endOffset - 1

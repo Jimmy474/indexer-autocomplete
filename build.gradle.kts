@@ -1,12 +1,14 @@
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 
 plugins {
-    id("org.jetbrains.kotlin.jvm")
+    kotlin("jvm") version "2.3.21"
     id("org.jetbrains.intellij.platform")
     id("org.jetbrains.changelog")
+    kotlin("plugin.serialization") version "2.3.21"
 }
 
 dependencies {
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
     testImplementation("junit:junit:4.13.2")
 
     intellijPlatform {

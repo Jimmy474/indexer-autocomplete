@@ -17,7 +17,7 @@ class LibraryIndexFoldingBuilder : FoldingBuilderEx() {
 
         val elements = PsiTreeUtil.findChildrenOfType(root, LibraryIndexPsiElement::class.java)
         for (element in elements) {
-            descriptors.add(FoldingDescriptor(element.node, element.textRange))
+            descriptors.add(FoldingDescriptor(element.node, element.textRange, null))
         }
 
         return descriptors.toTypedArray()
@@ -28,6 +28,8 @@ class LibraryIndexFoldingBuilder : FoldingBuilderEx() {
         val regex = LibraryIndex.INDEX_REFERENCE_REGEX
         val match = regex.matchEntire(element.text) ?: return null
         val indexReference = match.toIndexReference()
+
+        indexReference.customName?.value?.let { return it }
 
         val resolvedTargets = element.references.mapNotNull { it.resolve() }
         val resolved = resolvedTargets.firstOrNull { it is PsiMethod || it is PsiField } ?: resolvedTargets.firstOrNull { it is PsiClass }
@@ -44,7 +46,12 @@ class LibraryIndexFoldingBuilder : FoldingBuilderEx() {
             is PsiMethod -> {
                 val methodName = resolved.name
                 val params = resolved.parameterList.parameters.joinToString(", ") {
-                    it.type.presentableText + " " + it.name
+                    when{
+                        indexReference.flags.methodBoth -> "${simpleTypeName(it.type.presentableText)} ${it.name}"
+                        indexReference.flags.methodOnlyName -> it.name
+                        indexReference.flags.methodOnlyType -> simpleTypeName(it.type.presentableText)
+                        else -> ""
+                    }
                 }
                 val paramsString = if (indexReference.flags.methodWithParams) params else ""
                 when{
