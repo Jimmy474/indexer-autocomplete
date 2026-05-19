@@ -1,0 +1,376 @@
+package com.jimmy474.libraryindexerplugin
+
+import com.intellij.lang.annotation.HighlightSeverity
+import com.intellij.openapi.project.guessProjectDir
+import com.intellij.openapi.vfs.VfsUtil
+import com.intellij.testFramework.TestDataPath
+import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.jimmy474.libraryindexerplugin.plugin.LibraryIndexInspection
+
+@TestDataPath("\$CONTENT_ROOT/src/test/testData")
+class MyPluginTest : BasePlatformTestCase() {
+
+    override fun setUp() {
+        super.setUp()
+        myFixture.copyDirectoryToProject("library-index-dependency", "library-index-dependency")
+        myFixture.enableInspections(LibraryIndexInspection())
+        VfsUtil.markDirtyAndRefresh(false, true, true, myFixture.project.guessProjectDir())
+    }
+
+    fun `test Autocomplete Depth 0`() {
+        myFixture.configureByText("depth0.md","@`<caret>`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings ?: emptyList()
+        assertSameElements(suggestions, "net", "a", "broken", "special")
+    }
+
+    fun `test Autocomplete Depth 0_Text`() {
+        myFixture.configureByText("depth0_text.md","@`net<caret>`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings
+        assertNotNull(suggestions)
+        assertSameElements(suggestions!!, "net")
+    }
+
+    fun `test Autocomplete Depth 1`() {
+        myFixture.configureByText("depth1.md","@`net.<caret>`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings ?: emptyList()
+        assertSameElements(suggestions, "fabricmc", "minecraft")
+    }
+
+    fun `test Autocomplete Depth 1_Text`() {
+        myFixture.configureByText("depth1_text.md","@`net.fa<caret>`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings ?: emptyList()
+        assertSameElements(suggestions, "fabricmc")
+    }
+
+    fun `test No Completion In Python`() {
+        myFixture.configureByText("main.py", "hello @`<caret>`")
+        val result = myFixture.completeBasic()
+        assertEmpty(result)
+    }
+
+    fun `test Non Markdown File`() {
+        myFixture.configureByText("test.txt", "@`net.<caret>`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings
+        assertNullOrEmpty(suggestions)
+    }
+
+    fun `test Member Symbol Suggestion`() {
+        myFixture.configureByText("symbols.md", "@`net.fabricmc.SomeClass<caret>`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings ?: emptyList()
+        assertSameElements(suggestions, "#", "()")
+    }
+
+    fun `test Method Completion`() {
+        myFixture.configureByText("method_completion.md", "@`net.fabricmc.SomeClass#<caret>`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings ?: emptyList()
+        assertContainsElements(suggestions, "getName(java.lang.String)", "setName()", "setName(java.lang.String)", "getVersion()")
+    }
+
+    fun `test Method Completion With Prefix`() {
+        myFixture.configureByText("method_prefix.md", "@`net.fabricmc.SomeClass#get<caret>`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings ?: emptyList()
+        assertContainsElements(suggestions, "getName(java.lang.String)", "getVersion()")
+    }
+
+    fun `test Field Completion`() {
+        myFixture.configureByText("field_completion.md", "@`net.fabricmc.SomeClass#<caret>`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings ?: emptyList()
+        assertContainsElements(suggestions, "name", "version")
+    }
+
+    fun `test Invalid Path`() {
+        myFixture.configureByText("invalid_path.md", "@`does.not.exist<caret>`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings
+        assertNullOrEmpty(suggestions)
+    }
+
+    fun `test Invalid Method Syntax`() {
+        myFixture.configureByText("invalid_method.md", "@`net.fabricmc.#<caret>`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings
+        assertNullOrEmpty(suggestions)
+    }
+
+    fun `test Empty Input`() {
+        myFixture.configureByText("empty.md", "@`<caret>`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings ?: emptyList()
+        assertTrue(suggestions.isNotEmpty())
+    }
+
+    fun `test Directory Selection Inserts Dot`() {
+        myFixture.configureByText("dot_insert.md", "@`net<caret>`")
+        myFixture.completeBasic()
+        myFixture.finishLookup('\n')
+        myFixture.checkResult("@`net.`")
+    }
+
+    fun `test File Selection Does Not Insert Dot`() {
+        myFixture.configureByText("file_insert.md", "@`net.fabricmc.SomeCla<caret>`")
+        myFixture.completeBasic()
+        myFixture.finishLookup('\n')
+        myFixture.checkResult("@`net.fabricmc.SomeClass`")
+    }
+
+    fun `test Case Sensitive Completion`() {
+        myFixture.configureByText("case.md", "@`NET.<caret>`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings
+        assertNullOrEmpty(suggestions)
+    }
+
+    fun `test Ignore Invalid Prefix`() {
+        myFixture.configureByText("invalid_prefix.md", "net.<caret>")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings
+        assertNullOrEmpty(suggestions)
+    }
+
+    fun `test Multiple References`() {
+        myFixture.configureByText(
+            "multiple.md",
+            """
+                @`net.fabricmc`
+                
+                something
+                
+                @`net.<caret>`
+            """.trimIndent()
+        )
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings ?: emptyList()
+        assertContainsElements(suggestions, "fabricmc")
+    }
+
+    fun `test Deep Navigation`() {
+        myFixture.configureByText("deep.md", "@`a.b.c.d.e.f.g.<caret>`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings ?: emptyList()
+        assertContainsElements(suggestions, "target")
+    }
+
+    fun `test No Duplicate Suggestions`() {
+        myFixture.configureByText("duplicates.md", "@`net.<caret>`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings ?: emptyList()
+        assertEquals(suggestions.toSet().size, suggestions.size)
+    }
+
+    fun `test Space Stops Completion`() {
+        myFixture.configureByText("space.md", "@`net fabric<caret>`")
+        myFixture.completeBasic()
+        assertNullOrEmpty(myFixture.lookupElementStrings)
+    }
+
+    fun `test Invalid Character`() {
+        myFixture.configureByText("invalid_char.md", "@`net!*<caret>`")
+        myFixture.completeBasic()
+        assertNullOrEmpty(myFixture.lookupElementStrings)
+    }
+
+    fun `test Hyphen Support`() {
+        myFixture.configureByText("hyphen.md", "@`special.my-<caret>`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings ?: emptyList()
+        assertContainsElements(suggestions, "my-class")
+    }
+
+    fun `test Underscore Support`() {
+        myFixture.configureByText("underscore.md", "@`special.my_<caret>`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings ?: emptyList()
+        assertContainsElements(suggestions, "my_class")
+    }
+
+    fun `test Does Not Auto Complete`() {
+        myFixture.configureByText("no_auto.md", "@`net.fa<caret>`")
+        myFixture.completeBasic()
+        myFixture.checkResult("@`net.fa`")
+    }
+
+    fun `test Dollar Does Not Trigger Field Suggestions`() {
+        myFixture.configureByText("field_trigger.md", "@`net.fabricmc.SomeClass$<caret>`")
+        myFixture.completeBasic()
+
+        assertNullOrEmpty(myFixture.lookupElementStrings)
+    }
+
+    fun `test Missing Intermediate Folder`() {
+        myFixture.configureByText("missing_folder.md", "@`net.invalid.path<caret>`")
+        myFixture.completeBasic()
+        assertNullOrEmpty(myFixture.lookupElementStrings)
+    }
+
+    fun `test Empty Folder`() {
+        myFixture.configureByText("empty_folder.md", "@`special.empty.<caret>`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings ?: emptyList()
+        assertTrue(suggestions.isEmpty())
+    }
+
+    fun `test Directory And File Same Name`() {
+        myFixture.configureByText("same_name.md", "@`net.fabricmc.Te<caret>`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings ?: emptyList()
+        assertContainsElements(suggestions, "Test", "Test")
+    }
+
+    fun `test Method Selection Does Not Add Dot`() {
+        myFixture.configureByText("method_select.md", "@`net.fabricmc.SomeClass#getVer<caret>`")
+        myFixture.completeBasic()
+        myFixture.checkResult("@`net.fabricmc.SomeClass#getVersion()`")
+    }
+
+    fun `test Method Parameter Completion`() {
+        myFixture.configureByText("method_param.md", "@`net.fabricmc.SomeClass#getName(<caret>)`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings ?: emptyList()
+        assertContainsElements(suggestions, "java.lang.String")
+        assertDoesntContain(suggestions, "...")
+    }
+
+    fun `test Method Parameter Selection Keeps Closing Paren`() {
+        myFixture.configureByText("method_param_select.md", "@`net.fabricmc.SomeClass#getName(<caret>)`")
+        myFixture.completeBasic()
+        myFixture.finishLookup('\n')
+        myFixture.checkResult("@`net.fabricmc.SomeClass#getName(java.lang.String)`")
+    }
+
+    fun `test Constructor Parameter Completion`() {
+        myFixture.configureByText("constructor_param.md", "@`net.fabricmc.SomeClass(<caret>)`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings ?: emptyList()
+        assertContainsElements(suggestions, "java.lang.String")
+        assertDoesntContain(suggestions, "...")
+    }
+
+    fun `test Completion In Middle Of Text`() {
+        myFixture.configureByText("middle.md", "hello @`net.fa<caret>` world")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings ?: emptyList()
+        assertContainsElements(suggestions, "fabricmc")
+    }
+
+    fun `test Multiple Backticks`() {
+        myFixture.configureByText("multi_backtick.md", "@`net.fa<caret>` something `code`")
+        myFixture.completeBasic()
+
+        val suggestions = myFixture.lookupElementStrings ?: emptyList()
+        assertContainsElements(suggestions, "fabricmc")
+    }
+
+    fun `test Invalid Path Shows Error`() {
+        myFixture.configureByText("test.md", "@`does.not.exist<caret>`")
+
+        val highlights = myFixture.doHighlighting()
+        val error = highlights.find { it.description == "Package or Class 'does' not found" }
+
+        assertNotNull("Should find an error squiggle for invalid path", error)
+        assertEquals(HighlightSeverity.ERROR, error?.severity)
+    }
+
+    fun `test Malformed Reference Shows Error`() {
+        myFixture.configureByText("test.md", "@`invalid^path<caret>`")
+
+        val highlights = myFixture.doHighlighting()
+        val error = highlights.find { it.description == "Malformed library reference syntax" }
+
+        assertNotNull("Should find an error squiggle for malformed syntax", error)
+        assertEquals(HighlightSeverity.ERROR, error?.severity)
+    }
+
+    fun `test Empty Member Reference Shows Error`() {
+        myFixture.configureByText("test.md", "@`net.fabricmc.SomeClass#<caret>`")
+
+        val highlights = myFixture.doHighlighting()
+        val error = highlights.find { it.description == "Reference cannot end with '#', Expected a member name" }
+
+        assertNotNull("Should find an error squiggle for an empty member reference", error)
+        assertEquals(HighlightSeverity.ERROR, error?.severity)
+    }
+
+    fun `test Missing Method Shows Error`() {
+        myFixture.configureByText("test.md", "@`net.fabricmc.SomeClass#missing()<caret>`")
+
+        val highlights = myFixture.doHighlighting()
+        val error = highlights.find { it.description == "Method 'missing' not found" }
+
+        assertNotNull("Should find an error squiggle for a missing method", error)
+        assertEquals(HighlightSeverity.ERROR, error?.severity)
+    }
+
+    fun `test Ambiguous Method Overload Shows Error`() {
+        myFixture.configureByText("test.md", "@`net.fabricmc.SomeClass#getName()<caret>`")
+
+        val highlights = myFixture.doHighlighting()
+        val error = highlights.find { it.description == "Ambiguous reference for Method overload, to reference Method with multiple overloads you must provide the types of parameters in parenthesis" }
+
+        assertNotNull("Should find an error squiggle for an ambiguous method overload", error)
+        assertEquals(HighlightSeverity.ERROR, error?.severity)
+    }
+
+    fun `test Missing Method Overload Shows Error`() {
+        myFixture.configureByText("test.md", "@`net.fabricmc.SomeClass#getName(int)<caret>`")
+
+        val highlights = myFixture.doHighlighting()
+        val error = highlights.find { it.description == "Method overload with given types not found" }
+
+        assertNotNull("Should find an error squiggle for a missing method overload", error)
+        assertEquals(HighlightSeverity.ERROR, error?.severity)
+    }
+
+    fun `test Missing Field Shows Error`() {
+        myFixture.configureByText("test.md", "@`net.fabricmc.SomeClass#missing<caret>`")
+
+        val highlights = myFixture.doHighlighting()
+        val error = highlights.find { it.description == "Field 'missing' not found" }
+
+        assertNotNull("Should find an error squiggle for a missing field", error)
+        assertEquals(HighlightSeverity.ERROR, error?.severity)
+    }
+
+    fun `test Hyphenated Reference Show Error`() {
+        myFixture.configureByText("test.md", "@`special.my-class<caret>`")
+
+        val error = myFixture.doHighlighting().find { it.description == "Malformed library reference syntax" }
+
+        assertNotNull("Should find an error squiggle for using hyphen", error)
+        assertEquals(HighlightSeverity.ERROR, error?.severity)
+    }
+
+    override fun getTestDataPath(): String = "src/test/testData"
+}

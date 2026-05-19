@@ -8,9 +8,15 @@
         <option name="modules">
           <set>
             <option value="$PROJECT_DIR$" />
+            <option value="$PROJECT_DIR$/LibraryIndexerLib" />
+            <option value="$PROJECT_DIR$/LibraryIndexerPlugin" />
           </set>
         </option>
         <option name="resolveExternalAnnotations" value="true" />
+      </GradleProjectSettings>
+      <GradleProjectSettings>
+        <option name="externalProjectPath" value="$PROJECT_DIR$/LibraryIndexer" />
+        <option name="myGradleHome" value="" />
       </GradleProjectSettings>
     </option>
   </component>
