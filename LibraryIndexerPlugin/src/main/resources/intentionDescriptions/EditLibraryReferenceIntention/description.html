@@ -1,0 +1,41 @@
+<html lang="en">
+<body>
+<p>Validates and resolves custom Library Index references.</p>
+<p>This inspection ensures that your custom <code>@`...`</code> syntax correctly resolves to existing classes, methods, and fields within the project and attached libraries.</p>
+
+<h3>Syntax Reference</h3>
+<p>The general format for a library reference is:</p>
+<pre><code>@`[ClassFQN][#member][(parameters)][flags]`</code></pre>
+
+<b>1. Targeting Symbols</b>
+<ul>
+    <li><b>Class:</b> <code>@`java.lang.String`</code></li>
+    <li><b>Field:</b> <code>@`java.lang.System#out`</code></li>
+    <li><b>Method (Any overload):</b> <code>@`java.lang.String#substring`</code></li>
+    <li><b>Method (Specific overload):</b> <code>@`java.lang.String#substring(int,int)`</code></li>
+</ul>
+
+<b>2. Formatting Flags</b>
+<p>Append these flags at the end of the reference to change how it is displayed:</p>
+<ul>
+    <li><code>-</code> <b>Short Name:</b> Displays only the simple name (e.g., <code>String</code>).</li>
+    <li><code>+</code> <b>Full Name:</b> Displays the fully qualified name (e.g., <code>java.lang.String</code>).</li>
+    <li><code>|</code> <b>Custom Name:</b> Overrides the display text entirely. Example: <code>@`java.lang.String|My Custom Text`</code></li>
+</ul>
+
+<b>3. Method-Specific Flags</b>
+<p>When referencing methods, use these flags to format the parameter output:</p>
+<ul>
+    <li><code>:</code> <b>Type Only:</b> Displays parameter types.</li>
+    <li><code>,</code> <b>Name Only:</b> Displays parameter names.</li>
+    <li><code>;</code> <b>Both:</b> Displays both types and names.</li>
+    <li><code>^</code> <b>Return Type:</b> Displays the method's return type.</li>
+</ul>
+
+<h3>Examples</h3>
+<ul>
+    <li><code>@`java.util.List#add(java.lang.Object)-`</code> &rarr; Resolves to <code>add(Object)</code> and renders short names.</li>
+    <li><code>@`java.util.Collections#emptyList|Get Empty List`</code> &rarr; Resolves to the method and renders as "Get Empty List".</li>
+</ul>
+</body>
+</html>
