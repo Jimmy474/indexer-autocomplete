@@ -1,9 +1,15 @@
 package com.jimmy474.libraryindexerplugin.services
 
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.colors.EditorColors
 import com.intellij.openapi.editor.colors.EditorColorsManager
+import com.intellij.openapi.editor.colors.EditorFontType
+import com.intellij.openapi.editor.markup.HighlighterLayer
+import com.intellij.openapi.editor.markup.HighlighterTargetArea
 import com.intellij.openapi.observable.properties.PropertyGraph
+import com.intellij.openapi.observable.util.not
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.guessProjectDir
 import com.intellij.openapi.ui.DialogWrapper
@@ -11,19 +17,20 @@ import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.openapi.util.TextRange
 import com.intellij.ui.CollectionComboBoxModel
 import com.intellij.ui.ColoredListCellRenderer
+import com.intellij.ui.EditorTextField
 import com.intellij.ui.JBColor
-import com.intellij.ui.components.JBLabel
+import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.fields.ExtendableTextField
 import com.intellij.ui.dsl.builder.*
 import com.intellij.util.ui.JBUI
 import com.jimmy474.libraryindexerplugin.plugin.*
 import kotlinx.serialization.json.*
-import java.awt.Font
+import org.intellij.plugins.markdown.lang.MarkdownFileType
+import java.awt.Dimension
 import java.awt.Graphics
 import java.io.File
 import javax.swing.JComponent
 import javax.swing.JList
-import javax.swing.SwingConstants
 
 class EditReferenceDialog(
     private val project: Project,
@@ -38,19 +45,49 @@ class EditReferenceDialog(
     private val memberProp = propertyGraph.property<MemberDescriptor?>(null)
     private val overloadProp = propertyGraph.property<ParamsList?>(null)
     private val showOverloadProp = propertyGraph.property(false)
-    private val nameFormatProp = propertyGraph.property(NameFormat.DEFAULT)
-    private val methodFormatProp = propertyGraph.property(MethodFormat.DEFAULT)
+    private val renderingModeProp = propertyGraph.property(RenderingMode.Flags)
+    private val showCustomNameProp = propertyGraph.property(false)
+    private val nameFormatProp = propertyGraph.property(NameFormat.Default)
+    private val methodFormatProp = propertyGraph.property(MethodFormat.Default)
+    private lateinit var methodSegmentedButton: SegmentedButton<MethodFormat>
+    private val showMethodFormatProp = propertyGraph.property(false)
+    private val emptyParamsProp = propertyGraph.property(false)
     private val customNameProp = propertyGraph.property("")
 
-    private val previewTextProp = propertyGraph.property("")
+    private val previewEditor = object : EditorTextField("", project, MarkdownFileType.INSTANCE) {
+        override fun getMinimumSize(): Dimension = Dimension(100, super.preferredSize.height)
+        override fun getPreferredSize(): Dimension = Dimension(minOf(300,super.preferredSize.width), super.preferredSize.height)
+    }.apply {
+        isViewer = true
+        font = EditorColorsManager.getInstance().globalScheme.getFont(EditorFontType.PLAIN)
+        addSettingsProvider { editor ->
+            editor.isOneLineMode = false
+            editor.settings.isUseSoftWraps = true
+            editor.settings.isAdditionalPageAtBottom = false
+            editor.setVerticalScrollbarVisible(false)
+            editor.setHorizontalScrollbarVisible(false)
+            applySyntaxHighlighting(editor, text)
+        }
+    }
     private val foldedPreviewProp = propertyGraph.property("")
 
     private var stateLock = false
-    val foldedPreviewLabel = object : JBLabel(foldedPreviewProp.get()) {
+    val foldedPreviewLabel = object : JBTextArea(foldedPreviewProp.get()) {
+
+        override fun getMinimumSize(): Dimension = Dimension(100, super.preferredSize.height)
+        override fun getPreferredSize(): Dimension = Dimension(minOf(300,super.preferredSize.width), super.preferredSize.height)
+
         override fun paintComponent(g: Graphics) {
-            super.paintComponent(g)
+            val textWidth = g.fontMetrics.stringWidth(text)
+            val desiredWidth = textWidth + insets.left + insets.right
+            val paintWidth = minOf(width, desiredWidth)
+            g.color = background
+            g.fillRect(0, 0, paintWidth, height)
+
             g.color = foreground
-            g.drawRect(0, 0, width - 1, height - 1)
+            g.drawRect(0, 0, paintWidth - 1, height - 1)
+
+            super.paintComponent(g)
         }
     }.apply {
         val scheme = EditorColorsManager.getInstance().globalScheme
@@ -59,10 +96,17 @@ class EditReferenceDialog(
         background = attributes.backgroundColor ?: JBColor.namedColor("Editor.foldBackground", JBColor(0xF4F4F4, 0x3A3A3A))
         foreground = attributes.foregroundColor ?: JBColor.namedColor("Editor.foreground", JBColor(0x000000, 0xBBBBBB))
 
-        isOpaque = true
-        horizontalAlignment = SwingConstants.CENTER
+        isOpaque = false
+        isEditable = false
+        isFocusable = false
+
+        lineWrap = true
+        wrapStyleWord = false
+
+        font = scheme.getFont(EditorFontType.PLAIN)
         border = JBUI.Borders.empty(1, 6)
     }
+
     private var currentLoadedType: JsonObject? = null
 
     private val membersModel = CollectionComboBoxModel<MemberDescriptor>()
@@ -90,8 +134,115 @@ class EditReferenceDialog(
     private fun updatePreview() {
         if(stateLock) return
         val newReference = getNewReference()
-        previewTextProp.set(getUpdatedReferenceText(newReference))
+        val rawMacroText = getUpdatedReferenceText(newReference)
+
+        previewEditor.text = rawMacroText
         foldedPreviewProp.set(generateFoldedPreview(newReference))
+
+        ApplicationManager.getApplication().invokeLater {
+            val editor = previewEditor.editor ?: return@invokeLater
+            applySyntaxHighlighting(editor, rawMacroText)
+        }
+    }
+
+    private fun applySyntaxHighlighting(editor: Editor, rawMacroText: String) {
+        val markupModel = editor.markupModel
+
+        markupModel.removeAllHighlighters()
+
+        val match = LibraryIndex.INDEX_REFERENCE_REGEX.matchEntire(rawMacroText) ?: return
+        val previewReference = match.toIndexReference()
+
+        val scheme = EditorColorsManager.getInstance().globalScheme
+        val startOffset = previewReference.fullRange.startOffset
+        val endOffset = previewReference.fullRange.endOffset
+
+        markupModel.addRangeHighlighter(
+            startOffset,
+            startOffset + 2,
+            HighlighterLayer.SYNTAX,
+            scheme.getAttributes(LibraryIndexColors.MACRO_PREFIX),
+            HighlighterTargetArea.EXACT_RANGE
+        )
+        markupModel.addRangeHighlighter(
+            endOffset - 1,
+            endOffset,
+            HighlighterLayer.SYNTAX,
+            scheme.getAttributes(LibraryIndexColors.MACRO_PREFIX),
+            HighlighterTargetArea.EXACT_RANGE
+        )
+        markupModel.addRangeHighlighter(
+            startOffset + 2,
+            endOffset - 1,
+            HighlighterLayer.SYNTAX,
+            scheme.getAttributes(LibraryIndexColors.MACRO_TEXT),
+            HighlighterTargetArea.EXACT_RANGE
+        )
+
+        previewReference.className?.relativeRange?.let {
+            markupModel.addRangeHighlighter(
+                it.startOffset,
+                it.endOffset,
+                HighlighterLayer.SYNTAX,
+                scheme.getAttributes(LibraryIndexColors.MACRO_CLASS),
+                HighlighterTargetArea.EXACT_RANGE
+            )
+        }
+        memberProp.get()?.let { descriptor ->
+            if (descriptor.isConstructor) return@let
+            val key = if (previewReference.memberType == IndexReference.MemberType.METHOD) "methods" else "fields"
+            val items = currentLoadedType?.get(key)?.jsonArray
+            val member =
+                items?.find { it.jsonObject["name"]?.jsonPrimitive?.content == previewReference.memberName?.value }?.jsonObject
+            val isStatic =
+                member?.get("declaration")?.jsonObject?.get("flags")?.jsonObject?.get("isStatic")?.jsonPrimitive?.boolean
+                    ?: false
+            val typeHighlighter = when (previewReference.memberType) {
+                IndexReference.MemberType.METHOD -> if (isStatic) LibraryIndexColors.MACRO_METHOD_STATIC else LibraryIndexColors.MACRO_METHOD
+                IndexReference.MemberType.FIELD -> if (isStatic) LibraryIndexColors.MACRO_FIELD_STATIC else LibraryIndexColors.MACRO_FIELD
+                else -> LibraryIndexColors.MACRO_TEXT
+            }
+
+            previewReference.memberName?.relativeRange?.let {
+                markupModel.addRangeHighlighter(
+                    it.startOffset,
+                    it.endOffset,
+                    HighlighterLayer.SYNTAX,
+                    scheme.getAttributes(typeHighlighter),
+                    HighlighterTargetArea.EXACT_RANGE
+                )
+            }
+        }
+
+        previewReference.params?.forEach {
+            markupModel.addRangeHighlighter(
+                it.relativeRange.startOffset,
+                it.relativeRange.endOffset,
+                HighlighterLayer.SYNTAX,
+                scheme.getAttributes(LibraryIndexColors.MACRO_PARAMETER),
+                HighlighterTargetArea.EXACT_RANGE
+            )
+        }
+
+        previewReference.flags.relativeRange.takeIf { !it.isEmpty }?.let {
+            markupModel.addRangeHighlighter(
+                it.startOffset,
+                it.endOffset,
+                HighlighterLayer.SYNTAX,
+                scheme.getAttributes(LibraryIndexColors.MACRO_FLAGS),
+                HighlighterTargetArea.EXACT_RANGE
+            )
+        }
+
+        previewReference.customName?.relativeRange?.let {
+            markupModel.addRangeHighlighter(
+                it.startOffset,
+                it.endOffset,
+                HighlighterLayer.SYNTAX,
+                scheme.getAttributes(LibraryIndexColors.MACRO_CUSTOM_NAME),
+                HighlighterTargetArea.EXACT_RANGE
+            )
+        }
     }
 
     private fun setupListeners() {
@@ -105,6 +256,7 @@ class EditReferenceDialog(
             withStateLock {
                 overloadsModel.removeAll()
                 overloadProp.set(null)
+                emptyParamsProp.set(false)
                 val typeIndex = currentLoadedType
 
                 if (item == null || typeIndex == null) {
@@ -116,6 +268,7 @@ class EditReferenceDialog(
                 if ((item.isField && !item.isConstructor) || item.name == "<none>") {
                     showOverloadProp.set(false)
                     updatePreview()
+                    updateMethodFormatFlag(item)
                     return@withStateLock
                 }
 
@@ -140,18 +293,37 @@ class EditReferenceDialog(
 
                 if (distinctOverloads.isNotEmpty()) {
                     overloadProp.set(distinctOverloads.first())
-                    showOverloadProp.set(distinctOverloads.size > 1 || distinctOverloads.firstOrNull()?.params?.isNotEmpty() ?: false)
+                    val emptyParams = distinctOverloads.first().params.isEmpty()
+                    emptyParamsProp.set(emptyParams)
+                    showOverloadProp.set(distinctOverloads.size > 1 || !emptyParams)
                 } else {
                     showOverloadProp.set(false)
                 }
 
+                updateMethodFormatFlag(item)
             }
         }
 
         overloadProp.afterChange { updatePreview() }
+        renderingModeProp.afterChange {
+            showCustomNameProp.set(it == RenderingMode.CustomName)
+            updatePreview()
+        }
         nameFormatProp.afterChange { updatePreview() }
         methodFormatProp.afterChange { updatePreview() }
         customNameProp.afterChange { updatePreview() }
+    }
+
+    private fun updateMethodFormatFlag(item: MemberDescriptor){
+        showMethodFormatProp.set(!item.isField && item.name != "<none>")
+
+        if (item.isConstructor && methodFormatProp.get() == MethodFormat.ReturnType) {
+            methodFormatProp.set(MethodFormat.Default)
+        }
+
+        if(::methodSegmentedButton.isInitialized){
+            methodSegmentedButton.update(*MethodFormat.entries.toTypedArray())
+        }
     }
 
     private fun updateClassOrPackageListener(fqn: String) {
@@ -159,22 +331,21 @@ class EditReferenceDialog(
             membersModel.removeAll()
             overloadsModel.removeAll()
 
-            val typeIndex = fileReader.loadClassIndex(fqn)
-            currentLoadedType = typeIndex
+            currentLoadedType = fileReader.loadClassIndex(fqn)
 
-            if (typeIndex != null) {
+            currentLoadedType?.let{ ci ->
                 val members = mutableListOf<MemberDescriptor>()
                 members.add(MemberDescriptor("<none>", isField = false, isConstructor = false))
 
-                if (typeIndex["constructors"]!!.jsonArray.isNotEmpty()) {
+                if (ci["constructors"]!!.jsonArray.isNotEmpty()) {
                     members.add(MemberDescriptor("<init>", isField = false, isConstructor = true))
                 }
 
-                typeIndex["methods"]!!.jsonArray.forEach {
+                ci["methods"]!!.jsonArray.forEach {
                     members.add(MemberDescriptor(it.jsonObject["name"]!!.jsonPrimitive.content, isField = false))
                 }
 
-                typeIndex["fields"]!!.jsonArray.forEach {
+                ci["fields"]!!.jsonArray.forEach {
                     members.add(MemberDescriptor(it.jsonObject["name"]!!.jsonPrimitive.content, isField = true))
                 }
 
@@ -198,27 +369,36 @@ class EditReferenceDialog(
                 ))
             }
 
+            if(parsedReference.memberType == IndexReference.MemberType.METHOD){
+                showMethodFormatProp.set(true)
+            }
+
             if (parsedReference.params != null) {
                 val initialParams = parsedReference.params.map { it.value }
                 overloadProp.set(ParamsList(initialParams.map { simpleTypeName(it) }, initialParams))
             }
 
             when{
-                parsedReference.flags.shortName -> nameFormatProp.set(NameFormat.SHORT)
-                parsedReference.flags.fullName -> nameFormatProp.set(NameFormat.FULL)
+                parsedReference.flags.shortName -> nameFormatProp.set(NameFormat.Short)
+                parsedReference.flags.longName -> nameFormatProp.set(NameFormat.Long)
+                parsedReference.flags.fullName -> nameFormatProp.set(NameFormat.Full)
             }
             when{
-                parsedReference.flags.methodReturnType -> methodFormatProp.set(MethodFormat.RETURN_TYPE)
-                parsedReference.flags.methodOnlyType -> methodFormatProp.set(MethodFormat.TYPE_ONLY)
-                parsedReference.flags.methodOnlyName -> methodFormatProp.set(MethodFormat.NAME_ONLY)
-                parsedReference.flags.methodBoth -> methodFormatProp.set(MethodFormat.BOTH)
+                parsedReference.flags.methodReturnType -> methodFormatProp.set(MethodFormat.ReturnType)
+                parsedReference.flags.methodOnlyType -> methodFormatProp.set(MethodFormat.Type)
+                parsedReference.flags.methodOnlyName -> methodFormatProp.set(MethodFormat.Name)
+                parsedReference.flags.methodBoth -> methodFormatProp.set(MethodFormat.Both)
             }
             if (parsedReference.flags.isConstructor) memberProp.set(MemberDescriptor("<init>", isField = false, isConstructor = true))
 
             if(parsedReference.memberName == null && parsedReference.memberType == IndexReference.MemberType.NONE){
                 memberProp.set(MemberDescriptor("<none>", isField = false, isConstructor = false))
             }
-            parsedReference.customName?.let { customNameProp.set(it.value) }
+            parsedReference.customName?.let {
+                customNameProp.set(it.value)
+                showCustomNameProp.set(true)
+                renderingModeProp.set(RenderingMode.CustomName)
+            }
         }
     }
 
@@ -232,10 +412,10 @@ class EditReferenceDialog(
                     if (targetFolder != null) {
                         val dialog = MinimalFilePickerDialog(project, targetFolder, fqnProp.get())
                         if (dialog.showAndGet()) {
-                            val choice = dialog.selectedFile
+                            val choice = dialog.selectedFqn
                             if (choice != null) {
                                 (it.source as? ExtendableTextField)?.let { tf ->
-                                    tf.text = choice.path.removePrefix(targetFolder.path).removePrefix("/").replace('/', '.').removeSuffix(".json")
+                                    tf.text = choice
                                 }
                             }
                         }
@@ -262,7 +442,7 @@ class EditReferenceDialog(
                                 append(value.name)
 
                                 icon = if(value.name == "<none>"){
-                                    AllIcons.Nodes.Class
+                                    getIconFromKind(currentLoadedType?.get("kind")?.jsonPrimitive?.content ?: "")
                                 }else if (value.isField) {
                                     AllIcons.Nodes.Field
                                 } else if (value.isConstructor) {
@@ -274,54 +454,73 @@ class EditReferenceDialog(
                         }
                     }
             }
+
             row("Overload") {
                 comboBox(overloadsModel)
                     .bindItem(overloadProp)
                     .align(AlignX.FILL)
-            }.visibleIf(showOverloadProp)
+                visibleIf(showOverloadProp)
+            }
 
-            group("Formatting Flags") {
-                buttonsGroup("Class output") {
-                    row {
-                        radioButton("Default", NameFormat.DEFAULT).actionListener { _, _ -> nameFormatProp.set(NameFormat.DEFAULT) }
-                        radioButton("Short ( ${NameFormat.SHORT.symbol} )", NameFormat.SHORT).actionListener { _, _ -> nameFormatProp.set(NameFormat.SHORT) }
-                        radioButton("Full ( ${NameFormat.FULL.symbol} )", NameFormat.FULL).actionListener { _, _ -> nameFormatProp.set(NameFormat.FULL) }
+            row("Rendering Mode"){
+                segmentedButton(RenderingMode.entries){
+                    text = it.name
+                    if(it == RenderingMode.CustomName){
+                        icon = AllIcons.Nodes. WarningIntroduction
+                        toolTipText = "Custom Name Rendering Mode is not recommended, Unless it is an emergency"
                     }
-                }.bind({ nameFormatProp.get() }, { nameFormatProp.set(it) })
+                }.bind(renderingModeProp)
+            }
 
-                buttonsGroup("Method output") {
-                    row {
-                        radioButton("Default", MethodFormat.DEFAULT).actionListener { _, _ -> methodFormatProp.set(MethodFormat.DEFAULT) }
-                        radioButton("Type ( ${MethodFormat.TYPE_ONLY.symbol} )", MethodFormat.TYPE_ONLY).actionListener { _, _ -> methodFormatProp.set(MethodFormat.TYPE_ONLY) }
-                        radioButton("Name ( ${MethodFormat.NAME_ONLY.symbol} )", MethodFormat.NAME_ONLY).actionListener { _, _ -> methodFormatProp.set(MethodFormat.NAME_ONLY) }
-                        radioButton("Both ( ${MethodFormat.BOTH.symbol} )", MethodFormat.BOTH).actionListener { _, _ -> methodFormatProp.set(MethodFormat.BOTH) }
-                        radioButton("Return ( ${MethodFormat.RETURN_TYPE.symbol} )", MethodFormat.RETURN_TYPE).actionListener { _, _ -> methodFormatProp.set(MethodFormat.RETURN_TYPE) }
-                    }
-                }.bind({ methodFormatProp.get() }, { methodFormatProp.set(it) }).visibleIf(showOverloadProp)
+            group("Flags") {
+                row("FQN"){
+                    segmentedButton(NameFormat.entries){
+                        text = if(it == NameFormat.Default) it.name else "${it.name} ( ${it.symbol} )"
+                    }.bind(nameFormatProp)
+                }
+                row("Method") {
+                    methodSegmentedButton = segmentedButton(MethodFormat.entries){
+                        text = if(it == MethodFormat.Default) it.name else "${it.name} ( ${it.symbol} )"
+                        when {
+                            it == MethodFormat.ReturnType -> {
+                                toolTipText = if (memberProp.get()?.isConstructor == true) "Return Type is not available for constructors" else null
+                                enabled = memberProp.get()?.isConstructor != true
+                            }
+                            it != MethodFormat.Default -> {
+                                toolTipText = if (emptyParamsProp.get()) "${it.name} is not available for method with no parameters" else null
+                                enabled = !emptyParamsProp.get()
+                            }
+                            else -> {
+                                toolTipText = null
+                                enabled = true
+                            }
+                        }
+                    }.bind(methodFormatProp)
+                    visibleIf(showMethodFormatProp)
+                }
 
-                row("Custom Name ( ${LibraryIndex.CUSTOM_NAME_SYMBOL.unescapeRegex()} )") {
+                visibleIf(!showCustomNameProp)
+            }
+
+            group("Custom Name ( ${LibraryIndex.CUSTOM_NAME_SYMBOL.unescapeRegex()} )"){
+                row{
                     textField()
                         .bindText(customNameProp)
                         .align(AlignX.FILL)
-                        .comment("It is not recommended to use custom names, Unless it is an emergency")
+                        .validationOnInput {
+                            warning("It is not recommended to use custom names, Unless it is an emergency")
+                        }
                 }
+                visibleIf(showCustomNameProp)
             }
 
-            separator()
-
-            row("Preview") {
-                textField()
-                    .bindText(previewTextProp)
-                    .align(AlignX.FILL)
-                    .applyToComponent {
-                        isEditable = false
-                        font = font.deriveFont(Font.BOLD)
-                    }
-            }
-
-            row("Folded Preview"){}
-            row{
-                cell(foldedPreviewLabel).bindText(foldedPreviewProp)
+            group("Preview") {
+                row("Reference"){
+                    cell(previewEditor).align(AlignX.FILL).align(AlignY.FILL).resizableColumn()
+                }.resizableRow()
+                row("Output"){
+                    cell(foldedPreviewLabel).align(AlignX.FILL).align(AlignY.FILL).resizableColumn().bindText(foldedPreviewProp)
+                }.resizableRow()
             }
 
         }
@@ -331,33 +530,43 @@ class EditReferenceDialog(
         return newReference.toMarkdownReference()
     }
 
-    private fun getNewReference(): IndexReference = IndexReference(
-        fullRange = TextRange.EMPTY_RANGE,
-        fqn = GroupInfo(fqnProp.get(), TextRange.EMPTY_RANGE),
-        className = null,
-        memberName = memberProp.get()?.let { if (it.isConstructor || it.name == "<none>") null else GroupInfo(it.name, TextRange.EMPTY_RANGE) },
-        memberType = memberProp.get()?.let {
-            when {
-                it.name == "<none>" -> IndexReference.MemberType.NONE
-                it.isField -> IndexReference.MemberType.FIELD
-                it.isConstructor -> IndexReference.MemberType.METHOD
-                else -> IndexReference.MemberType.METHOD
-            }
-        } ?: IndexReference.MemberType.NONE,
-        params = overloadProp.get()?.params?.map { GroupInfo(it, TextRange.EMPTY_RANGE) },
-        flags = Flags(
-            relativeRange = TextRange.EMPTY_RANGE,
-            shortName = nameFormatProp.get() == NameFormat.SHORT,
-            fullName = nameFormatProp.get() == NameFormat.FULL,
-            methodWithParams = false,
-            methodOnlyType = methodFormatProp.get() == MethodFormat.TYPE_ONLY,
-            methodOnlyName = methodFormatProp.get() == MethodFormat.NAME_ONLY,
-            methodBoth = methodFormatProp.get() == MethodFormat.BOTH,
-            methodReturnType = methodFormatProp.get() == MethodFormat.RETURN_TYPE,
-            isConstructor = memberProp.get()?.isConstructor ?: false,
-        ),
-        customName = customNameProp.get().takeIf { it.isNotBlank() }?.let { GroupInfo(it, TextRange.EMPTY_RANGE) }
-    )
+    private fun getNewReference(): IndexReference {
+        val isConstructor = memberProp.get()?.isConstructor ?: false
+        return IndexReference(
+            fullRange = TextRange.EMPTY_RANGE,
+            fqn = GroupInfo(fqnProp.get(), TextRange.EMPTY_RANGE),
+            className = null,
+            memberName = memberProp.get()?.let {
+                if (it.isConstructor || it.name == "<none>") null else GroupInfo(
+                    it.name,
+                    TextRange.EMPTY_RANGE
+                )
+            },
+            memberType = memberProp.get()?.let {
+                when {
+                    it.name == "<none>" -> IndexReference.MemberType.NONE
+                    it.isField -> IndexReference.MemberType.FIELD
+                    it.isConstructor -> IndexReference.MemberType.METHOD
+                    else -> IndexReference.MemberType.METHOD
+                }
+            } ?: IndexReference.MemberType.NONE,
+            params = overloadProp.get()?.params?.map { GroupInfo(it, TextRange.EMPTY_RANGE) },
+            flags = Flags(
+                relativeRange = TextRange.EMPTY_RANGE,
+                shortName = !showCustomNameProp.get() && nameFormatProp.get() == NameFormat.Short,
+                longName = !showCustomNameProp.get() && nameFormatProp.get() == NameFormat.Long,
+                fullName = !showCustomNameProp.get() && nameFormatProp.get() == NameFormat.Full,
+                methodWithParams = false,
+                methodOnlyType = !showCustomNameProp.get() && showMethodFormatProp.get() && methodFormatProp.get() == MethodFormat.Type,
+                methodOnlyName = !showCustomNameProp.get() && showMethodFormatProp.get() && methodFormatProp.get() == MethodFormat.Name,
+                methodBoth = !showCustomNameProp.get() && showMethodFormatProp.get() && methodFormatProp.get() == MethodFormat.Both,
+                methodReturnType = !showCustomNameProp.get() && showMethodFormatProp.get() && !isConstructor && methodFormatProp . get () == MethodFormat.ReturnType,
+                isConstructor = memberProp.get()?.isConstructor ?: false,
+            ),
+            customName = if (showCustomNameProp.get()) customNameProp.get().takeIf { it.isNotBlank() }
+                ?.let { GroupInfo(it, TextRange.EMPTY_RANGE) } else null
+        )
+    }
 
     private fun generateFoldedPreview(indexReference: IndexReference): String {
         val fqn = fqnProp.get()
@@ -365,10 +574,13 @@ class EditReferenceDialog(
 
         if (fqn.isEmpty()) return ""
 
+        val outerClass = currentLoadedType?.get("nesting")?.jsonObject?.let{
+            if(it["isNested"]!!.jsonPrimitive.boolean) simpleTypeName(it["enclosingType"]!!.jsonPrimitive.content) else null
+        }
         val targetInfo = if (member == null || member.name == "<none>") {
-            TargetInfo(classFqn = indexReference.fqn.value)
+            TargetInfo(classFqn = indexReference.fqn.value, outerClass = outerClass)
         } else if (member.isField && !member.isConstructor) {
-            TargetInfo(classFqn = indexReference.fqn.value, memberName = indexReference.memberName!!.value, isField = true)
+            TargetInfo(classFqn = indexReference.fqn.value, outerClass = outerClass, memberName = indexReference.memberName!!.value, isField = true)
         } else {
             val targetArray = if (member.isConstructor) {
                 currentLoadedType?.get("constructors")?.jsonArray
@@ -381,7 +593,7 @@ class EditReferenceDialog(
                 it.jsonObject["parameters"]!!.jsonArray.map { p -> p.jsonObject["type"]!!.jsonPrimitive.content } == currentParams
             }?.jsonObject
 
-            val returnType = if (!member.isConstructor) targetMethod?.get("type")?.jsonPrimitive?.content else null
+            val returnType = if (!member.isConstructor) targetMethod?.get("returnType")?.jsonPrimitive?.content else null
 
             val params = targetMethod?.get("parameters")?.jsonArray?.map {
                 ParameterData(
@@ -392,6 +604,7 @@ class EditReferenceDialog(
 
             TargetInfo(
                 classFqn = indexReference.fqn.value,
+                outerClass = outerClass,
                 memberName = member.name,
                 isField = false,
                 isConstructor = member.isConstructor,
@@ -405,16 +618,22 @@ class EditReferenceDialog(
 }
 
 enum class NameFormat(val symbol: String) {
-    DEFAULT(""),
-    SHORT(LibraryIndex.SHORT_NAME_SYMBOL.unescapeRegex()),
-    FULL(LibraryIndex.FULL_NAME_SYMBOL.unescapeRegex())
+    Default(""),
+    Short(LibraryIndex.SHORT_NAME_SYMBOL.unescapeRegex()),
+    Long(LibraryIndex.LONG_NAME_SYMBOL.unescapeRegex()),
+    Full(LibraryIndex.FULL_NAME_SYMBOL.unescapeRegex())
 }
 enum class MethodFormat(val symbol: String) {
-    DEFAULT(""),
-    TYPE_ONLY(LibraryIndex.METHOD_ONLY_TYPE_SYMBOL.unescapeRegex()),
-    NAME_ONLY(LibraryIndex.METHOD_ONLY_NAME_SYMBOL.unescapeRegex()),
-    BOTH(LibraryIndex.METHOD_BOTH_SYMBOL.unescapeRegex()),
-    RETURN_TYPE(LibraryIndex.METHOD_RETURN_TYPE_SYMBOL.unescapeRegex())
+    Default(""),
+    Type(LibraryIndex.METHOD_ONLY_TYPE_SYMBOL.unescapeRegex()),
+    Name(LibraryIndex.METHOD_ONLY_NAME_SYMBOL.unescapeRegex()),
+    Both(LibraryIndex.METHOD_BOTH_SYMBOL.unescapeRegex()),
+    ReturnType(LibraryIndex.METHOD_RETURN_TYPE_SYMBOL.unescapeRegex())
+}
+
+enum class RenderingMode{
+    Flags,
+    CustomName
 }
 
 class SingleFileReader(private val project: Project) {

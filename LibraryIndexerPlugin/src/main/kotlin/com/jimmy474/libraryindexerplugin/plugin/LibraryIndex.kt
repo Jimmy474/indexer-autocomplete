@@ -22,7 +22,9 @@ object LibraryIndex{
     @Language("RegExp")
     const val SHORT_NAME_SYMBOL = "-"
     @Language("RegExp")
-    const val FULL_NAME_SYMBOL = "\\+"
+    const val LONG_NAME_SYMBOL = "\\+"
+    @Language("RegExp")
+    const val FULL_NAME_SYMBOL = "\\*"
     @Language("RegExp")
     const val METHOD_ONLY_TYPE_SYMBOL = ":"
     @Language("RegExp")
@@ -31,14 +33,14 @@ object LibraryIndex{
     const val METHOD_BOTH_SYMBOL = ";"
 
     @Language("RegExp")
-    const val METHOD_RETURN_TYPE_SYMBOL = "\\^"
+    const val METHOD_RETURN_TYPE_SYMBOL = ">"
     @Language("RegExp")
     const val MEMBER_PATTERN = """(?<members>$MEMBER_PREFIX(?<memberName>$VALID_ID))"""
 
     @Language("RegExp")
     const val METHOD_FLAGS = """((?<methodOnlyTypeFlag>$METHOD_ONLY_TYPE_SYMBOL)|(?<methodOnlyNameFlag>$METHOD_ONLY_NAME_SYMBOL)|(?<methodBothFlag>$METHOD_BOTH_SYMBOL)|(?<methodReturnType>$METHOD_RETURN_TYPE_SYMBOL))"""
     @Language("RegExp")
-    const val FLAGS_PATTERN = """(?<flags>$METHOD_FLAGS?((?<shortNameFlag>$SHORT_NAME_SYMBOL)|(?<fullNameFlag>$FULL_NAME_SYMBOL))?)"""
+    const val FLAGS_PATTERN = """(?<flags>((?<shortNameFlag>$SHORT_NAME_SYMBOL)|(?<longNameFlag>$LONG_NAME_SYMBOL)|(?<fullNameFlag>$FULL_NAME_SYMBOL))?$METHOD_FLAGS?)"""
 
     @Language("RegExp")
     const val CUSTOM_NAME_SYMBOL = "\\|"

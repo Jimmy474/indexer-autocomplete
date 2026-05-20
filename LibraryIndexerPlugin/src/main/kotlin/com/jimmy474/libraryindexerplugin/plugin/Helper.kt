@@ -33,6 +33,7 @@ data class GroupInfo(
 data class Flags(
     val relativeRange: TextRange = TextRange.EMPTY_RANGE,
     val shortName: Boolean = false,
+    val longName: Boolean = false,
     val fullName: Boolean = false,
     val methodWithParams: Boolean = false,
     val methodOnlyType: Boolean = false,
@@ -72,6 +73,7 @@ fun MatchResult.toIndexReference(): IndexReference {
 
     val memberInfo = if (memberName != null && memberNameRange != null) GroupInfo(memberName.value, memberNameRange) else null
     val shortNameFlag = groups["shortNameFlag"] != null
+    val longNameFlag = groups["longNameFlag"] != null
     val fullNameFlag = groups["fullNameFlag"] != null
 
     val paramsGroup = groups["params"]
@@ -101,7 +103,8 @@ fun MatchResult.toIndexReference(): IndexReference {
             methodReturnType = methodReturnType,
             isConstructor = isConstructor,
             shortName = shortNameFlag,
-            fullName = fullNameFlag
+            longName = longNameFlag,
+            fullName = fullNameFlag,
         ),
         customName = customName?.let { GroupInfo(it.value, it.range.toTextRange()) }
     )
@@ -117,13 +120,15 @@ fun IndexReference.toMarkdownReference(): String {
     if(memberType == IndexReference.MemberType.METHOD) {
         builder.append("(").append(params?.joinToString(",") { it.value } ?: "").append(")")
     }
+    if(flags.shortName) builder.append(LibraryIndex.SHORT_NAME_SYMBOL.unescapeRegex())
+    if(flags.longName) builder.append(LibraryIndex.LONG_NAME_SYMBOL.unescapeRegex())
+    if(flags.fullName) builder.append(LibraryIndex.FULL_NAME_SYMBOL.unescapeRegex())
+
     if(flags.methodReturnType) builder.append(LibraryIndex.METHOD_RETURN_TYPE_SYMBOL.unescapeRegex())
     if(flags.methodOnlyType) builder.append(LibraryIndex.METHOD_ONLY_TYPE_SYMBOL.unescapeRegex())
     if(flags.methodOnlyName) builder.append(LibraryIndex.METHOD_ONLY_NAME_SYMBOL.unescapeRegex())
     if(flags.methodBoth) builder.append(LibraryIndex.METHOD_BOTH_SYMBOL.unescapeRegex())
 
-    if(flags.shortName) builder.append(LibraryIndex.SHORT_NAME_SYMBOL.unescapeRegex())
-    if(flags.fullName) builder.append(LibraryIndex.FULL_NAME_SYMBOL.unescapeRegex())
     if(customName != null) builder.append("|").append(customName.value)
 
     builder.append("`")

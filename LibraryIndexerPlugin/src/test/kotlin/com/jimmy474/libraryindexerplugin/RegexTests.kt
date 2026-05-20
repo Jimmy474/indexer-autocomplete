@@ -61,7 +61,7 @@ class RegexTests: BasePlatformTestCase() {
                 flags = Flags(
                     relativeRange = TextRange.EMPTY_RANGE,
                     shortName = false,
-                    fullName = false,
+                    longName = false,
                     methodWithParams = false,
                     isConstructor = false
                 )
@@ -92,7 +92,7 @@ class RegexTests: BasePlatformTestCase() {
                 flags = Flags(
                     relativeRange = TextRange.EMPTY_RANGE,
                     shortName = false,
-                    fullName = false,
+                    longName = false,
                     methodWithParams = false,
                     isConstructor = true
                 )
@@ -125,7 +125,7 @@ class RegexTests: BasePlatformTestCase() {
                 flags = Flags(
                     relativeRange = TextRange.EMPTY_RANGE,
                     shortName = false,
-                    fullName = false,
+                    longName = false,
                     methodWithParams = false,
                     isConstructor = false
                 )
@@ -159,7 +159,7 @@ class RegexTests: BasePlatformTestCase() {
                 flags = Flags(
                     relativeRange = TextRange.EMPTY_RANGE,
                     shortName = false,
-                    fullName = false,
+                    longName = false,
                     methodWithParams = false,
                     isConstructor = false
                 )
@@ -196,7 +196,7 @@ class RegexTests: BasePlatformTestCase() {
                 flags = Flags(
                     relativeRange = TextRange.EMPTY_RANGE,
                     shortName = false,
-                    fullName = false,
+                    longName = false,
                     methodWithParams = true,
                     isConstructor = false
                 )
@@ -232,7 +232,7 @@ class RegexTests: BasePlatformTestCase() {
                 flags = Flags(
                     relativeRange = TextRange.EMPTY_RANGE,
                     shortName = false,
-                    fullName = false,
+                    longName = false,
                     methodWithParams = true,
                     isConstructor = false
                 )
@@ -262,7 +262,7 @@ class RegexTests: BasePlatformTestCase() {
                 flags = Flags(
                     relativeRange = TextRange(15, 16),
                     shortName = true,
-                    fullName = false,
+                    longName = false,
                     methodWithParams = false,
                     isConstructor = false
                 )
@@ -293,7 +293,7 @@ class RegexTests: BasePlatformTestCase() {
                 flags = Flags(
                     relativeRange = TextRange(17, 18),
                     shortName = true,
-                    fullName = false,
+                    longName = false,
                     methodWithParams = false,
                     isConstructor = true
                 )
@@ -326,7 +326,7 @@ class RegexTests: BasePlatformTestCase() {
                 flags = Flags(
                     relativeRange = TextRange(21, 22),
                     shortName = true,
-                    fullName = false,
+                    longName = false,
                     methodWithParams = false,
                     isConstructor = false
                 )
@@ -360,7 +360,7 @@ class RegexTests: BasePlatformTestCase() {
                 flags = Flags(
                     relativeRange = TextRange(24, 25),
                     shortName = true,
-                    fullName = false,
+                    longName = false,
                     methodWithParams = false,
                     isConstructor = false
                 )
@@ -390,7 +390,7 @@ class RegexTests: BasePlatformTestCase() {
                 flags = Flags(
                     relativeRange = TextRange(15, 16),
                     shortName = false,
-                    fullName = true,
+                    longName = true,
                     methodWithParams = false,
                     isConstructor = false
                 )
@@ -421,7 +421,7 @@ class RegexTests: BasePlatformTestCase() {
                 flags = Flags(
                     relativeRange = TextRange(17, 18),
                     shortName = false,
-                    fullName = true,
+                    longName = true,
                     methodWithParams = false,
                     isConstructor = true
                 )
@@ -454,7 +454,7 @@ class RegexTests: BasePlatformTestCase() {
                 flags = Flags(
                     relativeRange = TextRange(21, 22),
                     shortName = false,
-                    fullName = true,
+                    longName = true,
                     methodWithParams = false,
                     isConstructor = false
                 )
@@ -488,7 +488,7 @@ class RegexTests: BasePlatformTestCase() {
                 flags = Flags(
                     relativeRange = TextRange(24, 25),
                     shortName = false,
-                    fullName = true,
+                    longName = true,
                     methodWithParams = false,
                     isConstructor = false
                 )

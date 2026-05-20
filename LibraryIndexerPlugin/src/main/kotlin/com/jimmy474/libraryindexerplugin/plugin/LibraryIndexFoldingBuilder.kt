@@ -34,6 +34,7 @@ class LibraryIndexFoldingBuilder : FoldingBuilderEx() {
         val targetInfo = when (resolved) {
             is PsiMethod -> TargetInfo(
                 classFqn = resolved.containingClass?.qualifiedName ?: "",
+                outerClass = resolved.containingClass?.containingClass?.name,
                 memberName = resolved.name,
                 isField = false,
                 isConstructor = resolved.isConstructor,
@@ -42,11 +43,13 @@ class LibraryIndexFoldingBuilder : FoldingBuilderEx() {
             )
             is PsiField -> TargetInfo(
                 classFqn = resolved.containingClass?.qualifiedName ?: "",
+                outerClass = resolved.containingClass?.containingClass?.name,
                 memberName = resolved.name,
                 isField = true
             )
             is PsiClass -> TargetInfo(
-                classFqn = resolved.qualifiedName ?: ""
+                classFqn = resolved.qualifiedName ?: "",
+                outerClass = resolved.containingClass?.name,
             )
             else -> null
         }
@@ -61,6 +64,7 @@ class LibraryIndexFoldingBuilder : FoldingBuilderEx() {
 
 data class TargetInfo(
     val classFqn: String,
+    val outerClass: String? = null,
     val memberName: String? = null,
     val isField: Boolean = false,
     val isConstructor: Boolean = false,
@@ -85,7 +89,11 @@ object ReferenceFormatter {
         if (target == null) return fallbackText
 
         val classShortName = target.classFqn.substringAfterLast('.')
-        val className = if (reference.flags.fullName) target.classFqn else classShortName
+        val className = when {
+            reference.flags.longName || reference.flags.fullName -> target.classFqn
+            reference.flags.shortName -> classShortName
+            else -> target.outerClass?.let { "$it.$classShortName" } ?: classShortName
+        }
 
         if (target.memberName == null) return className
 
@@ -95,15 +103,15 @@ object ReferenceFormatter {
 
         if (reference.flags.methodReturnType && !target.isConstructor) {
             val retType = target.returnTypeFqn ?: "void"
-            return if (reference.flags.fullName) retType else retType.substringAfterLast('.')
+            return if (reference.flags.longName || reference.flags.fullName) retType else retType.substringAfterLast('.')
         }
 
         val paramsString = target.parameters.joinToString(", ") { param ->
-            val shortType = param.typeFqn.substringAfterLast('.')
+            val paramType = if(reference.flags.fullName) param.typeFqn else simpleTypeName(param.typeFqn)
             when {
-                reference.flags.methodBoth -> "$shortType ${param.name}"
+                reference.flags.methodBoth -> "$paramType ${param.name}"
                 reference.flags.methodOnlyName -> param.name
-                reference.flags.methodOnlyType -> shortType
+                reference.flags.methodOnlyType -> paramType
                 else -> ""
             }
         }
