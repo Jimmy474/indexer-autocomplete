@@ -28,6 +28,7 @@
         <methodReferencesSearch order="first" implementation="com.jimmy474.libraryindexerplugin.plugin.LibraryMarkdownMethodUsageSearcher"/>
         <usageTypeProvider order="first" implementation="com.jimmy474.libraryindexerplugin.plugin.LibraryIndexUsageTypeProvider"/>
         <fileBasedIndex implementation="com.jimmy474.libraryindexerplugin.plugin.LibraryMarkdownReferenceIndex"/>
+        <colorSettingsPage implementation="com.jimmy474.libraryindexerplugin.plugin.LibraryIndexColorSettingsPage"/>
         <localInspection
                 language="Markdown"
                 groupPath="Markdown"
@@ -43,5 +44,6 @@
             <category>Library index</category>
             <skipBeforeAfter>true</skipBeforeAfter>
         </intentionAction>
+        <lang.structureViewExtension implementation="com.jimmy474.libraryindexerplugin.plugin.LibraryIndexStructureExtension"/>
     </extensions>
 </idea-plugin>

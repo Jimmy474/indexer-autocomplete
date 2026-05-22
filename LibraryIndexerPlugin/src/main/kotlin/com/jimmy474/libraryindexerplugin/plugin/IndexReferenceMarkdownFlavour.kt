@@ -40,17 +40,20 @@ class IndexReferenceMarkdownFlavour: MarkdownFlavourProvider {
             }
         }
 
-
         override fun createHtmlGeneratingProviders(linkMap: LinkMap, baseURI: URI?): Map<IElementType, GeneratingProvider> {
-            val providers = flavour.createHtmlGeneratingProviders(linkMap, baseURI).toMutableMap()
-            providers[LIBRARY_INDEX_REFERENCE] = object : GeneratingProvider {
-                override fun processNode(visitor: HtmlGenerator.HtmlGeneratingVisitor, text: String, node: ASTNode) {
-                    visitor.consumeTagOpen(node, "span", "class=\"index-reference\"")
-                    visitor.consumeHtml(node.getTextInNode(text).substring(2, node.getTextInNode(text).length - 1))
-                    visitor.consumeTagClose("span")
+            return super.createHtmlGeneratingProviders(linkMap, baseURI) + hashMapOf(
+                LIBRARY_INDEX_REFERENCE to object : GeneratingProvider {
+                    override fun processNode(visitor: HtmlGenerator.HtmlGeneratingVisitor, text: String, node: ASTNode) {
+                        val inlineStyle = "color: #00627a; background-color: #ebf5f7; padding: 2px 4px; border-radius: 4px; font-family: monospace;"
+                        visitor.consumeTagOpen(node, "span", "style=\"$inlineStyle\" class=\"index-reference\"")
+                        val rawText = node.getTextInNode(text).toString()
+                        if (rawText.length > 3) {
+                            visitor.consumeHtml(rawText.substring(2, rawText.length - 1))
+                        }
+                        visitor.consumeTagClose("span")
+                    }
                 }
-            }
-            return providers
+            )
         }
 
         override fun createInlinesLexer(): MarkdownLexer {

@@ -58,8 +58,15 @@ class LibraryIndexInspection : LocalInspectionTool() {
                     return
                 }
 
-                if(indexReference.flags.isConstructor && indexReference.flags.methodReturnType){
-                    holder.registerProblem(element, "Method return type flag is not allowed for constructor reference", ProblemHighlightType.GENERIC_ERROR, RemoveTrailingSuffixFix(element, LibraryIndex.METHOD_RETURN_TYPE_SYMBOL))
+                if (indexReference.memberType != IndexReference.MemberType.METHOD) {
+                    when{
+                        indexReference.flags.methodBoth -> holder.registerProblem(element, "Method both flag is only allowed for method or constructor reference", ProblemHighlightType.GENERIC_ERROR, RemoveTrailingSuffixFix(element, LibraryIndex.METHOD_BOTH_SYMBOL))
+                        indexReference.flags.methodOnlyName -> holder.registerProblem(element, "Method only name flag is only allowed for method or constructor reference", ProblemHighlightType.GENERIC_ERROR, RemoveTrailingSuffixFix(element, LibraryIndex.METHOD_ONLY_NAME_SYMBOL))
+                        indexReference.flags.methodOnlyType -> holder.registerProblem(element, "Method only type flag is only allowed for method or constructor reference", ProblemHighlightType.GENERIC_ERROR, RemoveTrailingSuffixFix(element, LibraryIndex.METHOD_ONLY_TYPE_SYMBOL))
+                        indexReference.flags.methodReturnType -> holder.registerProblem(element, "Method return type flag is only allowed for method reference", ProblemHighlightType.GENERIC_ERROR, RemoveTrailingSuffixFix(element, LibraryIndex.METHOD_RETURN_TYPE_SYMBOL))
+                    }
+                }else if(indexReference.flags.isConstructor && indexReference.flags.methodReturnType){
+                    holder.registerProblem(element, "Method return type flag is only allowed for method reference", ProblemHighlightType.GENERIC_ERROR, RemoveTrailingSuffixFix(element, LibraryIndex.METHOD_RETURN_TYPE_SYMBOL))
                 }
 
                 var currentPartRelativeStart = 2

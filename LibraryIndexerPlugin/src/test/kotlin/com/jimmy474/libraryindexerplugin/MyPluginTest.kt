@@ -7,7 +7,7 @@ import com.intellij.testFramework.TestDataPath
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.jimmy474.libraryindexerplugin.plugin.LibraryIndexInspection
 
-@TestDataPath("\$CONTENT_ROOT/src/test/testData")
+@TestDataPath($$"$CONTENT_ROOT/src/test/testData")
 class MyPluginTest : BasePlatformTestCase() {
 
     override fun setUp() {
@@ -155,9 +155,9 @@ class MyPluginTest : BasePlatformTestCase() {
             "multiple.md",
             """
                 @`net.fabricmc`
-                
+
                 something
-                
+
                 @`net.<caret>`
             """.trimIndent()
         )

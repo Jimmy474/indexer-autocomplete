@@ -25,41 +25,49 @@ class LibraryIndexFoldingBuilder : FoldingBuilderEx() {
 
     override fun getPlaceholderText(node: ASTNode): String? {
         val element = node.psi as? LibraryIndexPsiElement ?: return null
-        val match = LibraryIndex.INDEX_REFERENCE_REGEX.matchEntire(element.text) ?: return null
-        val indexReference = match.toIndexReference()
-
-        val resolvedTargets = element.references.mapNotNull { it.resolve() }
-        val resolved = resolvedTargets.firstOrNull { it is PsiMethod || it is PsiField } ?: resolvedTargets.firstOrNull { it is PsiClass }
-
-        val targetInfo = when (resolved) {
-            is PsiMethod -> TargetInfo(
-                classFqn = resolved.containingClass?.qualifiedName ?: "",
-                outerClass = resolved.containingClass?.containingClass?.name,
-                memberName = resolved.name,
-                isField = false,
-                isConstructor = resolved.isConstructor,
-                returnTypeFqn = resolved.returnType?.canonicalText,
-                parameters = resolved.parameterList.parameters.map { ParameterData(it.name, it.type.canonicalText) }
-            )
-            is PsiField -> TargetInfo(
-                classFqn = resolved.containingClass?.qualifiedName ?: "",
-                outerClass = resolved.containingClass?.containingClass?.name,
-                memberName = resolved.name,
-                isField = true
-            )
-            is PsiClass -> TargetInfo(
-                classFqn = resolved.qualifiedName ?: "",
-                outerClass = resolved.containingClass?.name,
-            )
-            else -> null
-        }
-
-        val fallbackText = element.text.removePrefix("${LibraryIndex.PREFIX}`").removeSuffix("`")
-
-        return ReferenceFormatter.formatFoldedText(indexReference, targetInfo, fallbackText)
+        return getFoldedStringFromElement(element)
     }
 
     override fun isCollapsedByDefault(node: ASTNode): Boolean = true
+}
+
+fun getFoldedStringFromElement(element: LibraryIndexPsiElement): String? {
+    val match = LibraryIndex.INDEX_REFERENCE_REGEX.matchEntire(element.text) ?: return null
+    val indexReference = match.toIndexReference()
+
+    val resolvedTargets = element.references.mapNotNull { it.resolve() }
+    val resolved = resolvedTargets.firstOrNull { it is PsiMethod || it is PsiField }
+        ?: resolvedTargets.firstOrNull { it is PsiClass }
+
+    val targetInfo = when (resolved) {
+        is PsiMethod -> TargetInfo(
+            classFqn = resolved.containingClass?.qualifiedName ?: "",
+            outerClass = resolved.containingClass?.containingClass?.name,
+            memberName = resolved.name,
+            isField = false,
+            isConstructor = resolved.isConstructor,
+            returnTypeFqn = resolved.returnType?.canonicalText,
+            parameters = resolved.parameterList.parameters.map { ParameterData(it.name, it.type.canonicalText) }
+        )
+
+        is PsiField -> TargetInfo(
+            classFqn = resolved.containingClass?.qualifiedName ?: "",
+            outerClass = resolved.containingClass?.containingClass?.name,
+            memberName = resolved.name,
+            isField = true
+        )
+
+        is PsiClass -> TargetInfo(
+            classFqn = resolved.qualifiedName ?: "",
+            outerClass = resolved.containingClass?.name,
+        )
+
+        else -> null
+    }
+
+    val fallbackText = element.text.removePrefix("${LibraryIndex.PREFIX}`").removeSuffix("`")
+
+    return ReferenceFormatter.formatFoldedText(indexReference, targetInfo, fallbackText)
 }
 
 data class TargetInfo(
