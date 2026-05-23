@@ -45,5 +45,6 @@
             <skipBeforeAfter>true</skipBeforeAfter>
         </intentionAction>
         <lang.structureViewExtension implementation="com.jimmy474.libraryindexerplugin.plugin.LibraryIndexStructureExtension"/>
+        <codeInsight.inlayProvider language="Markdown" implementationClass="com.jimmy474.libraryindexerplugin.plugin.CodeSnippetInlayHintsProvider"/>
     </extensions>
 </idea-plugin>

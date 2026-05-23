@@ -59,8 +59,13 @@ object LibraryIndexColors {
 class LibraryIndexAnnotator : Annotator {
     override fun annotate(element: PsiElement, holder: AnnotationHolder) {
         if (element.containingFile !is MarkdownFile) return
-        if (element !is LibraryIndexPsiElement) return
+        when (element) {
+            is LibraryIndexPsiElement -> annotateLibraryIndexPsiElement(element, holder)
+            is CodeSnippetPsiElement -> annotateCodeSnippetPsiElement(element, holder)
+        }
+    }
 
+    private fun annotateLibraryIndexPsiElement(element: LibraryIndexPsiElement, holder: AnnotationHolder) {
         val text = element.text
         val startOffset = element.textRange.startOffset
         val endOffset = element.textRange.endOffset
@@ -102,7 +107,7 @@ class LibraryIndexAnnotator : Annotator {
             current = next
         }
 
-        if(!current.isDirectory){
+        if (!current.isDirectory) {
             indexReference.className?.relativeRange?.let {
                 holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
                     .range(it + startOffset)
@@ -115,11 +120,15 @@ class LibraryIndexAnnotator : Annotator {
             val jsonContent = getCachedJson(current, project)
             val key = if (indexReference.memberType == IndexReference.MemberType.METHOD) "methods" else "fields"
             val items = jsonContent?.get(key)?.jsonArray
-            val member = items?.find { it.jsonObject["name"]?.jsonPrimitive?.content == indexReference.memberName?.value }?.jsonObject ?: return
-            val isStatic = member["declaration"]?.jsonObject?.get("flags")?.jsonObject?.get("isStatic")?.jsonPrimitive?.boolean ?: false
+            val member =
+                items?.find { it.jsonObject["name"]?.jsonPrimitive?.content == indexReference.memberName?.value }?.jsonObject
+                    ?: return
+            val isStatic =
+                member["declaration"]?.jsonObject?.get("flags")?.jsonObject?.get("isStatic")?.jsonPrimitive?.boolean
+                    ?: false
             val typeHighlighter = when (indexReference.memberType) {
-                IndexReference.MemberType.METHOD -> if(isStatic) LibraryIndexColors.MACRO_METHOD_STATIC else LibraryIndexColors.MACRO_METHOD
-                IndexReference.MemberType.FIELD -> if(isStatic) LibraryIndexColors.MACRO_FIELD_STATIC else LibraryIndexColors.MACRO_FIELD
+                IndexReference.MemberType.METHOD -> if (isStatic) LibraryIndexColors.MACRO_METHOD_STATIC else LibraryIndexColors.MACRO_METHOD
+                IndexReference.MemberType.FIELD -> if (isStatic) LibraryIndexColors.MACRO_FIELD_STATIC else LibraryIndexColors.MACRO_FIELD
             }
 
             indexReference.memberName?.relativeRange?.let {
@@ -150,6 +159,37 @@ class LibraryIndexAnnotator : Annotator {
                 .textAttributes(LibraryIndexColors.MACRO_CUSTOM_NAME)
                 .create()
         }
-        
+    }
+
+    private fun annotateCodeSnippetPsiElement(element: CodeSnippetPsiElement, holder: AnnotationHolder) {
+        val startOffset = element.textRange.startOffset
+        val endOffset = element.textRange.endOffset
+
+        val match = LibraryIndex.CODE_SNIPPET_REGEX.matchEntire(element.text) ?: return
+        val codeSnippet = match.toCodeSnippetReference()
+
+        holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
+            .range(TextRange(startOffset, startOffset + 3))
+            .textAttributes(LibraryIndexColors.MACRO_PREFIX)
+            .create()
+
+        holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
+            .range(TextRange(startOffset + 4, endOffset))
+            .textAttributes(LibraryIndexColors.MACRO_TEXT)
+            .create()
+
+        codeSnippet.fileName?.relativeRange?.let {
+            holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
+                .range(it + startOffset)
+                .textAttributes(LibraryIndexColors.MACRO_CLASS)
+                .create()
+        }
+
+        codeSnippet.region?.relativeRange?.let {
+            holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
+                .range(it + startOffset)
+                .textAttributes(LibraryIndexColors.MACRO_FLAGS)
+                .create()
+        }
     }
 }

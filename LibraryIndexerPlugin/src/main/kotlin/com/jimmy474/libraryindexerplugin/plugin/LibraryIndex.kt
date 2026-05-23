@@ -51,8 +51,14 @@ object LibraryIndex{
     @Language("RegExp")
     const val INDEX_REFERENCE_PATH_PATTERN = """(?<fqn>$VALID_ID(?<className>\.$VALID_ID)*)($MEMBER_PATTERN?(?<methodFlag>$METHOD_FLAG)?)?($FLAGS_PATTERN|$CUSTOM_NAME_PATTERN)?"""
 
-    @Language("RegExp")
     const val INDEX_REFERENCE_PATTERN = "$PREFIX`$INDEX_REFERENCE_PATH_PATTERN`"
     val INDEX_REFERENCE_REGEX = Regex("^$INDEX_REFERENCE_PATTERN$")
+
+    const val CODE_SNIPPET_PREFIX = "<<<"
+    const val REGION_SYMBOL = "#"
+    const val ROOT_SYMBOL = "@"
+    @Language("RegExp")
+    const val CODE_SNIPPET_PATTERN = """$CODE_SNIPPET_PREFIX (?<path>$ROOT_SYMBOL/$VALID_ID(/$VALID_ID)*(/(?<fileName>$VALID_ID\.[a-zA-Z]+))?)($REGION_SYMBOL(?<region>[a-zA-Z_][a-zA-Z0-9_]*)?)?"""
+    val CODE_SNIPPET_REGEX = Regex("^$CODE_SNIPPET_PATTERN$")
 }
 

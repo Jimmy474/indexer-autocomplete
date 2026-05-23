@@ -8,41 +8,6 @@ import com.intellij.psi.util.CachedValueProvider
 import com.intellij.psi.util.CachedValuesManager
 import kotlinx.serialization.json.*
 
-data class IndexReference(
-    val fullRange: TextRange,
-    val fqn: GroupInfo,
-    val className: GroupInfo?,
-    val memberName: GroupInfo?,
-    val memberType: MemberType = MemberType.NONE,
-    val params: List<GroupInfo>? = null,
-    val flags: Flags = Flags(),
-    val customName: GroupInfo? = null,
-){
-    enum class MemberType {
-        NONE,
-        METHOD,
-        FIELD,
-    }
-}
-
-data class GroupInfo(
-    val value: String,
-    val relativeRange: TextRange
-)
-
-data class Flags(
-    val relativeRange: TextRange = TextRange.EMPTY_RANGE,
-    val shortName: Boolean = false,
-    val longName: Boolean = false,
-    val fullName: Boolean = false,
-    val methodWithParams: Boolean = false,
-    val methodOnlyType: Boolean = false,
-    val methodOnlyName: Boolean = false,
-    val methodBoth: Boolean = false,
-    val methodReturnType: Boolean = false,
-    val isConstructor: Boolean = false,
-)
-
 fun MatchResult.toIndexReference(): IndexReference {
     val fullRange = this.range.toTextRange()
     val fqn = groups["fqn"] ?: return IndexReference(fullRange = fullRange, fqn = GroupInfo("", TextRange.EMPTY_RANGE), className = null, memberName = null)
@@ -110,29 +75,12 @@ fun MatchResult.toIndexReference(): IndexReference {
     )
 }
 
-fun IndexReference.toMarkdownReference(): String {
-    val builder = StringBuilder()
-    builder.append("${LibraryIndex.PREFIX}`")
-    builder.append(fqn.value)
-    if (memberName != null) {
-        builder.append("#").append(memberName.value)
-    }
-    if(memberType == IndexReference.MemberType.METHOD) {
-        builder.append("(").append(params?.joinToString(",") { it.value } ?: "").append(")")
-    }
-    if(flags.shortName) builder.append(LibraryIndex.SHORT_NAME_SYMBOL.unescapeRegex())
-    if(flags.longName) builder.append(LibraryIndex.LONG_NAME_SYMBOL.unescapeRegex())
-    if(flags.fullName) builder.append(LibraryIndex.FULL_NAME_SYMBOL.unescapeRegex())
-
-    if(flags.methodReturnType) builder.append(LibraryIndex.METHOD_RETURN_TYPE_SYMBOL.unescapeRegex())
-    if(flags.methodOnlyType) builder.append(LibraryIndex.METHOD_ONLY_TYPE_SYMBOL.unescapeRegex())
-    if(flags.methodOnlyName) builder.append(LibraryIndex.METHOD_ONLY_NAME_SYMBOL.unescapeRegex())
-    if(flags.methodBoth) builder.append(LibraryIndex.METHOD_BOTH_SYMBOL.unescapeRegex())
-
-    if(customName != null) builder.append("|").append(customName.value)
-
-    builder.append("`")
-    return builder.toString()
+fun MatchResult.toCodeSnippetReference(): CodeSnippet{
+    val fullRange = this.range.toTextRange()
+    val path = groups["path"]?.let { GroupInfo(it.value, it.range.toTextRange()) } ?: return CodeSnippet(fullRange, GroupInfo("", TextRange.EMPTY_RANGE))
+    val fileName = groups["fileName"]?.let { GroupInfo(it.value, it.range.toTextRange()) }
+    val region = groups["region"]?.let { GroupInfo(it.value, it.range.toTextRange()) }
+    return CodeSnippet(fullRange, path, fileName, region)
 }
 
 fun String.unescapeRegex() = this.removePrefix("\\")

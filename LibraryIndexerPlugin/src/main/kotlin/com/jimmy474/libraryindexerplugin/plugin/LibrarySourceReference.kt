@@ -1,5 +1,6 @@
 package com.jimmy474.libraryindexerplugin.plugin
 
+import com.intellij.openapi.project.guessProjectDir
 import com.intellij.openapi.util.TextRange
 import com.intellij.patterns.PlatformPatterns
 import com.intellij.psi.*
@@ -10,6 +11,7 @@ import org.intellij.plugins.markdown.lang.psi.impl.MarkdownFile
 class LibraryReferenceContributor: PsiReferenceContributor() {
     override fun registerReferenceProviders(registrar: PsiReferenceRegistrar){
         registrar.registerReferenceProvider(PlatformPatterns.psiElement(LibraryIndexPsiElement::class.java),LibraryReferenceProvider())
+        registrar.registerReferenceProvider(PlatformPatterns.psiElement(CodeSnippetPsiElement::class.java),CodeSnippetReferenceProvider())
     }
 }
 
@@ -37,9 +39,8 @@ class LibraryReferenceProvider: PsiReferenceProvider(){
     }
 }
 
-
 class LibrarySourceReference(
-    element: PsiElement,
+    element: LibraryIndexPsiElement,
     range: TextRange,
     val fqn: String,
     val memberType: IndexReference.MemberType,
@@ -97,3 +98,37 @@ class LibrarySourceReference(
     }
 }
 
+class CodeSnippetReferenceProvider: PsiReferenceProvider(){
+    override fun getReferencesByElement(element: PsiElement, context: ProcessingContext): Array<PsiReference> {
+        if (element.containingFile !is MarkdownFile) return emptyArray()
+        if (element !is CodeSnippetPsiElement) return emptyArray()
+
+        val match = LibraryIndex.CODE_SNIPPET_REGEX.matchEntire(element.text) ?: return emptyArray()
+        val codeSnippet = match.toCodeSnippetReference()
+        return buildList {
+            val path = codeSnippet.path.value.removePrefix("${LibraryIndex.ROOT_SYMBOL}/")
+            codeSnippet.fileName?.let { add(CodeSnippetReference(element, it.relativeRange, path)) }
+            codeSnippet.region?.let { add(CodeSnippetReference(element, it.relativeRange, path, it.value)) }
+        }.toTypedArray()
+    }
+}
+
+class CodeSnippetReference(element: CodeSnippetPsiElement, range: TextRange, private val path: String, private val region: String? = null) : PsiReferenceBase<PsiElement>(element, range){
+    override fun resolve(): PsiElement? {
+        val project = element.project
+        val virtualFile = project.guessProjectDir()?.findFileByRelativePath(path) ?: return null
+        val psiFile = PsiManager.getInstance(project).findFile(virtualFile) ?: return null
+        return region?.let{
+            if(virtualFile.extension != "java") return@let null
+            val fileText = psiFile.text
+            val targetText = "// #region $region"
+
+            val offset = fileText.indexOf(targetText)
+            if (offset == -1) return@let null
+
+            val elementAtOffset = psiFile.findElementAt(offset)
+            return@let elementAtOffset
+        } ?: psiFile
+    }
+
+}
