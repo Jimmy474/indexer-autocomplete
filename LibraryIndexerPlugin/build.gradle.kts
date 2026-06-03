@@ -1,7 +1,7 @@
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 
 plugins {
-    kotlin("jvm") version "2.3.21"
+    kotlin("jvm") version "2.4.0"
     id("org.jetbrains.intellij.platform")
     id("org.jetbrains.changelog")
     kotlin("plugin.serialization") version "2.3.21"
