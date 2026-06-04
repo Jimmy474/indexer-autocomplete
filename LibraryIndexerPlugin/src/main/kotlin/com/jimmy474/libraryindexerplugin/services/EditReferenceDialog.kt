@@ -23,7 +23,9 @@ import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.fields.ExtendableTextField
 import com.intellij.ui.dsl.builder.*
 import com.intellij.util.ui.JBUI
-import com.jimmy474.libraryindexerplugin.plugin.*
+import com.jimmy474.libraryindexerplugin.plugin.common.GroupInfo
+import com.jimmy474.libraryindexerplugin.plugin.common.IndexerHighlightColors
+import com.jimmy474.libraryindexerplugin.plugin.libraryindexer.*
 import kotlinx.serialization.json.*
 import org.intellij.plugins.markdown.lang.MarkdownFileType
 import java.awt.Dimension
@@ -161,21 +163,21 @@ class EditReferenceDialog(
             startOffset,
             startOffset + 2,
             HighlighterLayer.SYNTAX,
-            scheme.getAttributes(LibraryIndexColors.MACRO_PREFIX),
+            scheme.getAttributes(IndexerHighlightColors.MACRO_PREFIX),
             HighlighterTargetArea.EXACT_RANGE
         )
         markupModel.addRangeHighlighter(
             endOffset - 1,
             endOffset,
             HighlighterLayer.SYNTAX,
-            scheme.getAttributes(LibraryIndexColors.MACRO_PREFIX),
+            scheme.getAttributes(IndexerHighlightColors.MACRO_PREFIX),
             HighlighterTargetArea.EXACT_RANGE
         )
         markupModel.addRangeHighlighter(
             startOffset + 2,
             endOffset - 1,
             HighlighterLayer.SYNTAX,
-            scheme.getAttributes(LibraryIndexColors.MACRO_TEXT),
+            scheme.getAttributes(IndexerHighlightColors.MACRO_TEXT),
             HighlighterTargetArea.EXACT_RANGE
         )
 
@@ -184,7 +186,7 @@ class EditReferenceDialog(
                 it.startOffset,
                 it.endOffset,
                 HighlighterLayer.SYNTAX,
-                scheme.getAttributes(LibraryIndexColors.MACRO_CLASS),
+                scheme.getAttributes(IndexerHighlightColors.MACRO_CLASS),
                 HighlighterTargetArea.EXACT_RANGE
             )
         }
@@ -198,9 +200,9 @@ class EditReferenceDialog(
                 member?.get("declaration")?.jsonObject?.get("flags")?.jsonObject?.get("isStatic")?.jsonPrimitive?.boolean
                     ?: false
             val typeHighlighter = when (previewReference.memberType) {
-                IndexReference.MemberType.METHOD -> if (isStatic) LibraryIndexColors.MACRO_METHOD_STATIC else LibraryIndexColors.MACRO_METHOD
-                IndexReference.MemberType.FIELD -> if (isStatic) LibraryIndexColors.MACRO_FIELD_STATIC else LibraryIndexColors.MACRO_FIELD
-                else -> LibraryIndexColors.MACRO_TEXT
+                IndexReference.MemberType.METHOD -> if (isStatic) IndexerHighlightColors.MACRO_METHOD_STATIC else IndexerHighlightColors.MACRO_METHOD
+                IndexReference.MemberType.FIELD -> if (isStatic) IndexerHighlightColors.MACRO_FIELD_STATIC else IndexerHighlightColors.MACRO_FIELD
+                else -> IndexerHighlightColors.MACRO_TEXT
             }
 
             previewReference.memberName?.relativeRange?.let {
@@ -219,7 +221,7 @@ class EditReferenceDialog(
                 it.relativeRange.startOffset,
                 it.relativeRange.endOffset,
                 HighlighterLayer.SYNTAX,
-                scheme.getAttributes(LibraryIndexColors.MACRO_PARAMETER),
+                scheme.getAttributes(IndexerHighlightColors.MACRO_PARAMETER),
                 HighlighterTargetArea.EXACT_RANGE
             )
         }
@@ -229,7 +231,7 @@ class EditReferenceDialog(
                 it.startOffset,
                 it.endOffset,
                 HighlighterLayer.SYNTAX,
-                scheme.getAttributes(LibraryIndexColors.MACRO_FLAGS),
+                scheme.getAttributes(IndexerHighlightColors.MACRO_FLAGS),
                 HighlighterTargetArea.EXACT_RANGE
             )
         }
@@ -239,7 +241,7 @@ class EditReferenceDialog(
                 it.startOffset,
                 it.endOffset,
                 HighlighterLayer.SYNTAX,
-                scheme.getAttributes(LibraryIndexColors.MACRO_CUSTOM_NAME),
+                scheme.getAttributes(IndexerHighlightColors.MACRO_CUSTOM_NAME),
                 HighlighterTargetArea.EXACT_RANGE
             )
         }

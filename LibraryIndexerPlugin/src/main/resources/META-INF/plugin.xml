@@ -13,28 +13,31 @@
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="org.intellij.markdown">
-        <flavourProvider implementation="com.jimmy474.libraryindexerplugin.plugin.IndexReferenceMarkdownFlavour"/>
+        <flavourProvider implementation="com.jimmy474.libraryindexerplugin.plugin.markdown.IndexerMarkdownFlavourProvider"/>
     </extensions>
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow factoryClass="com.jimmy474.libraryindexerplugin.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
         <postStartupActivity implementation="com.jimmy474.libraryindexerplugin.startup.MyProjectActivity" />
-        <lang.parserDefinition order="first" language="Markdown" implementationClass="com.jimmy474.libraryindexerplugin.plugin.LibraryIndexParserDefinition"/>
-        <completion.contributor language="Markdown" implementationClass="com.jimmy474.libraryindexerplugin.plugin.LibraryIndexCompletionContributor"/>
-        <annotator language="Markdown" implementationClass="com.jimmy474.libraryindexerplugin.plugin.LibraryIndexAnnotator"/>
-        <psi.referenceContributor language="Markdown" implementation="com.jimmy474.libraryindexerplugin.plugin.LibraryReferenceContributor"/>
-        <codeInsight.lineMarkerProvider language="Markdown" implementationClass="com.jimmy474.libraryindexerplugin.plugin.LibraryIndexLineMarkerProvider" />
-        <lang.foldingBuilder order="first" language="Markdown" implementationClass="com.jimmy474.libraryindexerplugin.plugin.LibraryIndexFoldingBuilder" />
-        <referencesSearch order="first" implementation="com.jimmy474.libraryindexerplugin.plugin.LibraryMarkdownUsageSearcher"/>
-        <methodReferencesSearch order="first" implementation="com.jimmy474.libraryindexerplugin.plugin.LibraryMarkdownMethodUsageSearcher"/>
-        <usageTypeProvider order="first" implementation="com.jimmy474.libraryindexerplugin.plugin.LibraryIndexUsageTypeProvider"/>
-        <fileBasedIndex implementation="com.jimmy474.libraryindexerplugin.plugin.LibraryMarkdownReferenceIndex"/>
-        <colorSettingsPage implementation="com.jimmy474.libraryindexerplugin.plugin.LibraryIndexColorSettingsPage"/>
+        <lang.parserDefinition order="first" language="Markdown" implementationClass="com.jimmy474.libraryindexerplugin.plugin.markdown.IndexerMarkdownParserDefinition"/>
+        <completion.contributor language="Markdown" implementationClass="com.jimmy474.libraryindexerplugin.plugin.libraryindexer.LibraryIndexCompletionContributor"/>
+        <completion.contributor language="Markdown" implementationClass="com.jimmy474.libraryindexerplugin.plugin.codesnippet.CodeSnippetCompletionContributor"/>
+        <annotator language="Markdown" implementationClass="com.jimmy474.libraryindexerplugin.plugin.libraryindexer.LibraryIndexAnnotator"/>
+        <annotator language="Markdown" implementationClass="com.jimmy474.libraryindexerplugin.plugin.codesnippet.CodeSnippetAnnotator"/>
+        <psi.referenceContributor language="Markdown" implementation="com.jimmy474.libraryindexerplugin.plugin.libraryindexer.LibraryReferenceContributor"/>
+        <psi.referenceContributor language="Markdown" implementation="com.jimmy474.libraryindexerplugin.plugin.codesnippet.CodeSnippetReferenceContributor"/>
+        <codeInsight.lineMarkerProvider language="Markdown" implementationClass="com.jimmy474.libraryindexerplugin.plugin.libraryindexer.LibraryIndexLineMarkerProvider" />
+        <lang.foldingBuilder order="first" language="Markdown" implementationClass="com.jimmy474.libraryindexerplugin.plugin.libraryindexer.LibraryIndexFoldingBuilder" />
+        <referencesSearch order="first" implementation="com.jimmy474.libraryindexerplugin.plugin.libraryindexer.LibraryMarkdownUsageSearcher"/>
+        <methodReferencesSearch order="first" implementation="com.jimmy474.libraryindexerplugin.plugin.libraryindexer.LibraryMarkdownMethodUsageSearcher"/>
+        <usageTypeProvider order="first" implementation="com.jimmy474.libraryindexerplugin.plugin.libraryindexer.LibraryIndexUsageTypeProvider"/>
+        <fileBasedIndex implementation="com.jimmy474.libraryindexerplugin.plugin.libraryindexer.LibraryMarkdownReferenceIndex"/>
+        <colorSettingsPage implementation="com.jimmy474.libraryindexerplugin.plugin.libraryindexer.LibraryIndexColorSettingsPage"/>
         <localInspection
                 language="Markdown"
                 groupPath="Markdown"
                 enabledByDefault="true"
                 level="ERROR"
-                implementationClass="com.jimmy474.libraryindexerplugin.plugin.LibraryIndexInspection"
+                implementationClass="com.jimmy474.libraryindexerplugin.plugin.libraryindexer.LibraryIndexInspection"
                 key="inspection.library.index.display.name"
                 groupKey="inspection.library.index.group.key"
         />
@@ -44,7 +47,11 @@
             <category>Library index</category>
             <skipBeforeAfter>true</skipBeforeAfter>
         </intentionAction>
-        <lang.structureViewExtension implementation="com.jimmy474.libraryindexerplugin.plugin.LibraryIndexStructureExtension"/>
-        <codeInsight.inlayProvider language="Markdown" implementationClass="com.jimmy474.libraryindexerplugin.plugin.CodeSnippetInlayHintsProvider"/>
+        <localInspection language="Markdown" groupPath="Markdown" enabledByDefault="true" level="ERROR" implementationClass="com.jimmy474.libraryindexerplugin.plugin.codesnippet.CodeSnippetInspection" key="inspection.code.snippet.display.name"/>
+        <lang.structureViewExtension implementation="com.jimmy474.libraryindexerplugin.plugin.libraryindexer.LibraryIndexStructureExtension"/>
+        <codeInsight.inlayProvider language="Markdown" implementationClass="com.jimmy474.libraryindexerplugin.plugin.codesnippet.CodeSnippetInlayHintsProvider"/>
+        <renamePsiElementProcessor implementation="com.jimmy474.libraryindexerplugin.plugin.codesnippet.CodeSnippetRenameProcessor" order="first"/>
+        <psi.referenceContributor language="JAVA" implementation="com.jimmy474.libraryindexerplugin.plugin.codesnippet.RegionCommentReferenceContributor"/>
+        <referencesSearch order="first" implementation="com.jimmy474.libraryindexerplugin.plugin.codesnippet.CodeSnippetFileReferenceSearcher"/>
     </extensions>
 </idea-plugin>
