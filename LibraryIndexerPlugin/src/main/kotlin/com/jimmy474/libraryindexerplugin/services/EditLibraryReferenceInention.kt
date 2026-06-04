@@ -7,9 +7,9 @@ import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
 import com.intellij.psi.util.PsiTreeUtil
-import com.jimmy474.libraryindexerplugin.plugin.LibraryIndex
-import com.jimmy474.libraryindexerplugin.plugin.LibraryIndexPsiElement
-import com.jimmy474.libraryindexerplugin.plugin.toIndexReference
+import com.jimmy474.libraryindexerplugin.plugin.libraryindexer.LibraryIndex
+import com.jimmy474.libraryindexerplugin.plugin.libraryindexer.LibraryIndexPsiElement
+import com.jimmy474.libraryindexerplugin.plugin.libraryindexer.toIndexReference
 
 class EditLibraryReferenceIntention : PsiElementBaseIntentionAction() {
 

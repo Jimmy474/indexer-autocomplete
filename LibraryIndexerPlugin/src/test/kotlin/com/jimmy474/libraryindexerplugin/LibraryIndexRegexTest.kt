@@ -1,6 +1,10 @@
 package com.jimmy474.libraryindexerplugin
 
-import com.jimmy474.libraryindexerplugin.plugin.*
+import com.jimmy474.libraryindexerplugin.plugin.libraryindexer.Flags
+import com.jimmy474.libraryindexerplugin.plugin.libraryindexer.IndexReference
+import com.jimmy474.libraryindexerplugin.plugin.libraryindexer.LibraryIndex
+import com.jimmy474.libraryindexerplugin.plugin.libraryindexer.toIndexReference
+import com.jimmy474.libraryindexerplugin.plugin.libraryindexer.unescapeRegex
 import org.junit.Assert.*
 import org.junit.Test
 
